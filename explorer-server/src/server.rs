@@ -39,11 +39,13 @@ impl Server {
             body {
                 (self.toolbar())
 
-                .ui.container {
+                .ui.container.homepage {
                     h1 {
                         "Welcome to the be.cash Block Explorer"
                     }
-                    "We welcome your feedback and bug reports to contact@be.cash."
+                    p {
+                        "We welcome your feedback and bug reports to contact@be.cash."
+                    }
                 }
                 
                 (self.footer())

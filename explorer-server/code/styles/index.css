@@ -5,6 +5,10 @@
   font-style: normal;
 }
 
+.homepage {
+  min-height: calc(100% - 50px - 42px - 1rem - 50px)
+}
+
 #blocks-table {
   height: 600px;
   overflow-y: hidden;
@@ -174,10 +178,8 @@
 
 #footer {
   margin-top: 50px;
-}
-
-#footer .container {
-  padding: 20px;
+  padding: 15px;
+  height: 50px;
 }
 
 .bottom-pagination {

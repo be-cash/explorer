@@ -1,12 +1,39 @@
-@font-face {
-  font-family: 'Ubuntu Mono';
-  src: url('fonts/UbuntuMono-Regular.ttf') format('ttf');
-  font-weight: normal;
-  font-style: normal;
+h1, h2, h3, h4, h5 {
+  font-family: 'Ubuntu Mono'!important;
+  color: #161c33;
 }
 
 .homepage {
-  min-height: calc(100% - 50px - 42px - 1rem - 50px)
+  min-height: calc(100% - 50px - 56px - 1rem - 50px);
+  padding-top: 48px;
+  box-sizing: border-box;
+}
+
+.ludwig {
+  position: absolute;
+  height: 50vh;
+  top: 14.6%;
+  left: 40%;
+  right: 0;
+  margin: 0 auto;
+  border-radius: 22vh;
+  /* border: 2px solid black; */
+  z-index: 999;
+  pointer-events: none;
+}
+
+.circle {
+  position: absolute;
+  height: 50vh;
+  width: 50vh;
+  top: 15%;
+  left: 40%;
+  right: 0;
+  margin: 0 auto;
+  border-radius: 25vh;
+  background: rgb(255,255,255);
+  background: radial-gradient(circle, rgba(255,255,255,0.50) 0%, rgba(22,28,51,0.50) 67%);
+  z-index: 999;
 }
 
 #blocks-table {
@@ -68,7 +95,7 @@
 }
 
 .main.menu .item img.logo {
-  margin-right: 1.5em;
+  width: 81px!important;
 }
 
 #search-box {
@@ -193,4 +220,48 @@
 .ui.pagination.menu .item.disabled {
   padding-left: 0.35em;
   padding-right: 0.35em;
+}
+
+.ocean { 
+  height: 5%;
+  width:100%;
+  position:absolute;
+  bottom:0;
+  left:0;
+  background: #fb7b81;
+  box-sizing: border-box;
+}
+
+.wave {
+  background: url(../../assets/wave.svg) repeat-x; 
+  position: absolute;
+  top: -198px;
+  width: 6400px;
+  height: 198px;
+  animation: wave 66s cubic-bezier( 0.36, 0.45, 0.63, 0.53) infinite;
+  transform: translate3d(0, 0, 0);
+}
+
+.wave:nth-of-type(2) {
+  top: -175px;
+  animation: wave 66s cubic-bezier( 0.36, 0.45, 0.63, 0.53) -.125s infinite, swell 14s ease -1.25s infinite;
+  opacity: 1;
+}
+
+@keyframes wave {
+  0% {
+    margin-left: 0;
+  }
+  100% {
+    margin-left: -1600px;
+  }
+}
+
+@keyframes swell {
+  0%, 100% {
+    transform: translate3d(0,-25px,0);
+  }
+  50% {
+    transform: translate3d(0,5px,0);
+  }
 }

@@ -47,6 +47,16 @@ impl Server {
                         "We welcome your feedback and bug reports to contact@be.cash."
                     }
                 }
+
+                div {
+                    .circle {}
+                    img.ludwig src="/assets/ludwig.png" {}
+                }
+
+                .ocean {
+                    .wave { }
+                    .wave { }
+                }
                 
                 (self.footer())
             }
@@ -1297,9 +1307,7 @@ impl Server {
             .ui.main.menu {
                 a.header.item href="/" {
                     img.logo src="/assets/logo.png" {}
-                    "be.cash Explorer"
                 }
-                a.item href="/blocks" { "Blocks" }
                 .item {
                     #search-box.ui.transparent.icon.input {
                         input#search-bar
@@ -1311,13 +1319,7 @@ impl Server {
                             onclick="searchButton()" {}
                     }
                 }
-                .ui.right.floated.dropdown.item href="#" {
-                    "eCash"
-                    // i.dropdown.icon {}
-                    .menu {
-                        .item { "eCash" }
-                    }
-                }
+                a.right.floated.item href="/blocks" { "Blocks" }
             }
             // script { (PreEscaped(r#"
             //     $('.main.menu  .ui.dropdown').dropdown({

@@ -3,10 +3,41 @@ h1, h2, h3, h4, h5 {
   color: #161c33;
 }
 
-.homepage {
+.hidden {
+  display: none;
+}
+
+.homepage__welcome  {
   min-height: calc(100% - 50px - 56px - 1rem - 50px);
   padding-top: 48px;
   box-sizing: border-box;
+}
+
+.homepage__ludwig-image {
+  position: absolute;
+  height: 50vh;
+  top: 14.6%;
+  left: 40%;
+  right: 0;
+  margin: 0 auto;
+  border-radius: 22vh;
+  /* border: 2px solid black; */
+  z-index: 999;
+  pointer-events: none;
+}
+
+.homepage__ludwig-circle {
+  position: absolute;
+  height: 50vh;
+  width: 50vh;
+  top: 15%;
+  left: 40%;
+  right: 0;
+  margin: 0 auto;
+  border-radius: 25vh;
+  background: rgb(255,255,255);
+  background: radial-gradient(circle, rgba(255,255,255,0.50) 0%, rgba(22,28,51,0.50) 67%);
+  z-index: 999;
 }
 
 .ludwig {
@@ -230,7 +261,8 @@ h1, h2, h3, h4, h5 {
 }
 
 .wave:nth-of-type(2) {
-  top: -175px;
+  /* top: -175px; */
+  /* background: url(../../assets/wave.svg) repeat-x; */
   animation: wave 66s cubic-bezier( 0.36, 0.45, 0.63, 0.53) -.125s infinite, swell 14s ease -1.25s infinite;
   opacity: 1;
 }

@@ -131,7 +131,7 @@ impl Server {
             body {
                 (self.toolbar())
 
-                #blocks {
+                .ui.container {
                     #blocks-table {}
                 }
 

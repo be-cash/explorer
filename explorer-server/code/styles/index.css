@@ -36,19 +36,6 @@ h1, h2, h3, h4, h5 {
   z-index: 999;
 }
 
-#blocks-table {
-  height: 600px;
-  overflow-y: hidden;
-}
-
-#blocks-table > .webix_dtable {
-  margin: auto;
-}
-
-#blocks .size {
-  text-align: right;
-}
-
 .webix_dtable .hash {
   font-family: 'Ubuntu Mono';
 }

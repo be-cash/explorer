@@ -22,19 +22,11 @@ webix.ready(function(){
     view: "datatable",
     columns:[
       {
-        width: 160,
+        adjust: true,
         id: "age",
         header: "Age",
         template: function (row) {
-          return '<a href="/block/' + row.hash + '">' + moment(row.timestamp).fromNow() + '</a>';
-        },
-      },
-      {
-        width: 200,
-        id: "timestamp",
-        header: "Date (UTC" + tzString + ")",
-        template: function (row) {
-          return moment(row.timestamp).format('ll, LTS');
+          return moment(row.timestamp).fromNow();
         },
       },
       {
@@ -42,14 +34,25 @@ webix.ready(function(){
         id: "height",
         header: "Height",
         template: function (row) {
-          return renderInteger(row.height);
+          return '<a href="/block-height/' + row.height + '">' + renderInteger(row.height) + '</a>';
         },
       },
       {
-        width: 500,
+        adjust: true,
+        id: "numTxs",
+        header: "Transactions",
+        template: function (row) {
+          return renderInteger(row.numTxs);
+        }
+      },
+      {
+        fillspace: true,
         id: "hash",
         header: "Block Hash",
         css: "hash",
+        template: function (row) {
+          return '<a href="/block/' + row.hash + '">' + row.hash + '</a>';
+        },
       },
       {
         width: 100,
@@ -65,14 +68,6 @@ webix.ready(function(){
             return (row.size / 1000000).toFixed(2) + ' MB';
           }
         },
-      },
-      {
-        width: 120,
-        id: "numTxs",
-        header: "Transactions",
-        template: function (row) {
-          return renderInteger(row.numTxs);
-        }
       },
       {
         width: 130,
@@ -91,9 +86,16 @@ webix.ready(function(){
           }
         },
       },
+      {
+        adjust: true,
+        id: "timestamp",
+        header: "Date (UTC" + tzString + ")",
+        template: function (row) {
+          return moment(row.timestamp).format('ll, LTS');
+        },
+      },
     ],
-    autowidth: true,
-    //autoheight: true,
+    autoheight: true,
     data: blockData,
   });	
 });

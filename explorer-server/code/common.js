@@ -93,3 +93,9 @@ function searchButton() {
   var search = $('#search-bar').val();
   location.href = '/search/' + search;
 }
+
+function toggleTransactionScriptData() {
+  $('.tx-transaction__script-data').each(function () {
+    $(this).toggleClass('hidden');
+  });
+}

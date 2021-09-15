@@ -310,3 +310,27 @@ table.tx-details-table tbody td:nth-child(2) {
 .ui.vertical.divider.tx-details-table__divider:before {
   height: 100%;
 }
+
+.tx-transaction__toggle-wrapper {
+  display: flex;
+  height: 100%;
+  flex-direction: row;
+  justify-content: flex-end;
+}
+
+.ui.slider.checkbox.tx-transaction__toggle {
+  align-self: center;
+}
+
+.tx-transaction__arrow-separator {
+  display: flex;
+  flex-direction: column;
+  align-content: center;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  opacity: 0.2;
+  align-self: center;
+  margin: 0 auto;
+  height: 100%;
+}

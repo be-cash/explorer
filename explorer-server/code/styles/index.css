@@ -284,3 +284,29 @@ h1, h2, h3, h4, h5 {
     transform: translate3d(0,5px,0);
   }
 }
+
+.tx-details {
+  justify-content: space-between;
+}
+
+table.tx-details-table {
+  width: 48% !important;
+  align-self: baseline;
+}
+
+table.tx-details-table tr td {
+  border-top: 0 !important;
+}
+
+table.tx-details-table tbody td:nth-child(2) {
+  text-align: right;
+}
+
+.ui.vertical.divider.tx-details-table__divider {
+  height: 40%;
+}
+
+.ui.vertical.divider.tx-details-table__divider:after,
+.ui.vertical.divider.tx-details-table__divider:before {
+  height: 100%;
+}

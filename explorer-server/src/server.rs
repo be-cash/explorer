@@ -525,77 +525,79 @@ impl Server {
                             (hex::encode(&tx.raw_tx))
                         }
                     }
-                    .ui.grid {
-                        .six.wide.column {
-                            table.ui.table {
-                                tbody {
-                                    tr {
-                                        td { "Age" }
-                                        td { (HumanTime::from(timestamp)) }
-                                    }
-                                    tr {
-                                        td { "Mined on" }
-                                        td {
-                                            @match &block_meta {
-                                                Some(block_meta) => (self.render_timestamp(block_meta.timestamp)),
-                                                None => "Not mined yet",
-                                            }
+
+                    h2 { "Details" }
+                    .ui.grid.segment.tx-details {
+                        table.tx-details-table.ui.very.basic.table {
+                            tbody {
+                                tr {
+                                    td { "Age" }
+                                    td { (HumanTime::from(timestamp)) }
+                                }
+                                tr {
+                                    td { "Block" }
+                                    td {
+                                        @match &block_meta {
+                                            Some(_) => {
+                                                a href={"/block/" (to_le_hex(&tx.transaction.block_hash))} {
+                                                    (render_integer(tx.transaction.block_height as u64))
+                                                }
+                                                " ("
+                                                (render_integer(confirmations as u64))
+                                                " confirmations)"
+                                            },
+                                            None => "Not mined yet",
                                         }
                                     }
-                                    tr {
-                                        td { "Unix Timestamp" }
-                                        td {
-                                            @match &block_meta {
-                                                Some(block_meta) => (render_integer(block_meta.timestamp as u64)),
-                                                None => "Not mined yet",
-                                            }
+                                }
+                                tr {
+                                    td { "Unix Timestamp" }
+                                    td {
+                                        @match &block_meta {
+                                            Some(block_meta) => (render_integer(block_meta.timestamp as u64)),
+                                            None => "Not mined yet",
                                         }
                                     }
-                                    tr {
-                                        td { "Block" }
-                                        td {
-                                            @match &block_meta {
-                                                Some(_) => {
-                                                    a href={"/block/" (to_le_hex(&tx.transaction.block_hash))} {
-                                                        (render_integer(tx.transaction.block_height as u64))
-                                                    }
-                                                    " ("
-                                                    (render_integer(confirmations as u64))
-                                                    " confirmations)"
-                                                },
-                                                None => "Not mined yet",
-                                            }
-                                        }
-                                    }
-                                    tr {
-                                        td { "Size" }
-                                        td { (render_byte_size(tx.transaction.size as u64, true)) }
-                                    }
-                                    tr {
-                                        td { "Total Input" }
-                                        td { (render_sats(tx.tx_meta.sats_input)) " XEC" }
-                                    }
-                                    tr {
-                                        td { "Total Output" }
-                                        td { (render_sats(tx.tx_meta.sats_output)) " XEC" }
-                                    }
-                                    tr {
-                                        td { "Fee" }
-                                        td { (render_sats((tx.tx_meta.sats_input - tx.tx_meta.sats_output).max(0))) " XEC" }
-                                    }
-                                    tr {
-                                        td { "Version" }
-                                        td { (tx.transaction.version) }
-                                    }
-                                    tr {
-                                        td { "Locktime" }
-                                        td { (render_integer(tx.transaction.lock_time as u64)) }
-                                    }
+                                }
+                                tr {
+                                    td { "Size" }
+                                    td { (render_byte_size(tx.transaction.size as u64, true)) }
+                                }
+                                tr {
+                                    td { "Locktime" }
+                                    td { (render_integer(tx.transaction.lock_time as u64)) }
                                 }
                             }
                         }
-                        .ten.wide.column {
-                            (self.render_tx_variant(&tx.tx_meta.variant, &tx.token_meta))
+                        .ui.vertical.divider.tx-details-table__divider {}
+                        table.tx-details-table.ui.very.basic.table {
+                            tbody {
+                                tr {
+                                    td { "Mined on" }
+                                    td {
+                                        @match &block_meta {
+                                            Some(block_meta) => (self.render_timestamp(block_meta.timestamp)),
+                                            None => "Not mined yet",
+                                        }
+                                    }
+                                }
+                                tr {
+                                    td { "Total Input" }
+                                    td { (render_sats(tx.tx_meta.sats_input)) " XEC" }
+                                }
+                                tr {
+                                    td { "Total Output" }
+                                    td { (render_sats(tx.tx_meta.sats_output)) " XEC" }
+                                }
+                                tr {
+                                    td { "Fee" }
+                                    td { (render_sats((tx.tx_meta.sats_input - tx.tx_meta.sats_output).max(0))) " XEC" }
+                                }
+                                tr {
+                                    td { "Version" }
+                                    td { (tx.transaction.version) }
+                                }
+                            }
                         }
                     }
                     .ui.grid {

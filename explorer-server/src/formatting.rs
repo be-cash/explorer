@@ -28,6 +28,13 @@ pub fn render_byte_size(size: u64, is_long: bool) -> Markup {
     }
 }
 
+pub fn render_integer_with_commas(int: u64) -> Markup {
+    let string = int.to_formatted_string(&Locale::en);
+    html! {
+        span { (string) }
+    }
+}
+
 pub fn render_integer(int: u64) -> Markup {
     let string = int.to_formatted_string(&Locale::en);
     let parts = string.split(",").collect::<Vec<_>>();
@@ -80,10 +87,10 @@ pub fn render_sats(sats: i64) -> Markup {
     let integer_part: u64 = parts.next().unwrap().parse().unwrap();
     let fract_part = parts.next().unwrap();
     if fract_part == "00" {
-        render_integer(integer_part)
+        render_integer_with_commas(integer_part)
     } else {
         html! {
-            (render_integer(integer_part))
+            (render_integer_with_commas(integer_part))
             "."
             small {
                 (fract_part)

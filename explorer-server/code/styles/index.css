@@ -334,3 +334,7 @@ table.tx-details-table tbody td:nth-child(2) {
   margin: 0 auto;
   height: 100%;
 }
+
+.amount.hex {
+  text-align: right;
+}

@@ -1,4 +1,4 @@
-use std::{collections::HashMap, convert::Infallible, net::SocketAddr, sync::Arc};
+use std::{collections::HashMap, convert::Infallible, sync::Arc, fs};
 
 use anyhow::{Result, Context};
 use indexdb::IndexDb;
@@ -14,6 +14,7 @@ mod server;
 mod indexdb;
 mod indexer;
 mod primitives;
+mod config;
 
 type ServerRef = Arc<Server>;
 
@@ -26,9 +27,8 @@ fn with_server(
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let host: SocketAddr = "127.0.0.1:3035"
-        .parse()
-        .with_context(|| "Invalid host in config")?;
+    let config_string = fs::read_to_string("config.toml")?;
+    let config = config::load_config(&config_string)?;
 
     //let db = Db::open("../db.sled")?;
     let indexdb = IndexDb::open("../index.rocksdb")?;
@@ -128,7 +128,7 @@ async fn main() -> Result<()> {
         .or(assets)
         .recover(handle_rejection);
 
-    warp::serve(routes).run(host).await;
+    warp::serve(routes).run(config.host).await;
 
     Ok(())
 }

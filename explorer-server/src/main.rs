@@ -26,7 +26,7 @@ fn with_server(
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let host: SocketAddr = "127.0.0.1:3035"
+    let host: SocketAddr = "0.0.0.0:3035"
         .parse()
         .with_context(|| "Invalid host in config")?;
 

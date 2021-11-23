@@ -1,0 +1,2 @@
+mode = "development"
+index_database = "../index.test.rocksdb"

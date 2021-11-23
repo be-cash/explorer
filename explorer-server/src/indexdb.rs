@@ -2,6 +2,7 @@ use std::{collections::HashMap, path::Path};
 use std::convert::TryInto;
 
 use anyhow::{Context, Result, anyhow, bail};
+use serde::{Deserialize, Serialize};
 use serde::de::DeserializeOwned;
 use rocksdb::{ColumnFamily, Options, WriteBatch};
 use zerocopy::{AsBytes, FromBytes, U32, Unaligned};
@@ -33,6 +34,19 @@ pub struct AddrTxKey {
 pub struct AddrKeyPrefix {
     pub addr_type: u8,
     pub addr_hash: [u8; 20],
+}
+
+#[derive(Deserialize, Serialize, FromBytes, AsBytes, Debug, Default, Clone, Copy, PartialEq, Eq)]
+#[repr(C)]
+pub struct BlockHashWithTxPartialPrefix {
+    pub block_height: i32,
+    pub tx_partial_hash: [u8; 16],
+}
+
+#[derive(FromBytes, AsBytes, Debug, Default, Clone, Copy, PartialEq, Eq)]
+#[repr(C)]
+pub struct BlockHashTxIdxPrefix {
+    pub block_height: i32,
 }
 
 #[derive(FromBytes, AsBytes, Unaligned, Debug, Default, Clone, Copy)]
@@ -71,6 +85,7 @@ impl IndexDb {
             db = rocksdb::DB::open_default(&path)?;
         }
         Self::ensure_cf(&mut db, "block_height_idx")?;
+        Self::ensure_cf(&mut db, "block_height_tx_idx")?;
         Self::ensure_cf(&mut db, "block_meta")?;
         Self::ensure_cf(&mut db, "tx_meta")?;
         Self::ensure_cf(&mut db, "addr_tx_meta")?;
@@ -79,6 +94,7 @@ impl IndexDb {
         Self::ensure_cf(&mut db, "tx_out_spend")?;
         Self::ensure_cf(&mut db, "token_meta")?;
 
+        Self::ensure_cf(&mut db, "mempool_block_height_tx_idx")?;
         Self::ensure_cf(&mut db, "mempool_tx_meta")?;
         Self::ensure_cf(&mut db, "mempool_addr_tx_meta")?;
         Self::ensure_cf(&mut db, "mempool_addr_utxo_add")?;
@@ -106,6 +122,9 @@ impl IndexDb {
     fn cf_block_meta(&self) -> &ColumnFamily {
         self.db.cf_handle("block_meta").expect("No such column family")
     }
+    fn cf_block_height_tx_idx(&self) -> &ColumnFamily {
+        self.db.cf_handle("block_height_tx_idx").expect("No such column family")
+    }
     fn cf_tx_meta(&self) -> &ColumnFamily {
         self.db.cf_handle("tx_meta").expect("No such column family")
     }
@@ -125,6 +144,9 @@ impl IndexDb {
         self.db.cf_handle("token_meta").expect("No such column family")
     }
 
+    fn cf_mempool_block_height_tx_idx(&self) -> &ColumnFamily {
+        self.db.cf_handle("mempool_block_height_tx_idx").expect("No such column family")
+    }
     fn cf_mempool_tx_meta(&self) -> &ColumnFamily {
         self.db.cf_handle("mempool_tx_meta").expect("No such column family")
     }
@@ -238,6 +260,48 @@ impl IndexDb {
             }
         }
         Ok(spends)
+    }
+
+    pub fn block_height_txs(&self, block_height: i32) -> Result<Vec<([u8; 32], TxMeta)>> {
+        let block_hash_tx_prefix = BlockHashTxIdxPrefix {
+            block_height: block_height,
+        };
+        let mut entries = Vec::new();
+
+        let mut iter_mempool_block_hash_tx = self.db.raw_iterator_cf(self.cf_mempool_block_height_tx_idx());
+        iter_mempool_block_hash_tx.seek(block_hash_tx_prefix.as_bytes());
+
+        while let (Some(key), Some(value)) = (iter_mempool_block_hash_tx.key(), iter_mempool_block_hash_tx.value()) {
+            let tx_hash: [u8; 32] = (&value[..]).try_into().unwrap();
+            let block_hash_tx_prefix: BlockHashWithTxPartialPrefix = bincode::deserialize(&key)?;
+
+            if block_hash_tx_prefix.block_height != block_height {
+                break;
+            }
+
+            let tx_meta = self.tx_meta(value)?.ok_or_else(|| anyhow!("Unindexed txs"))?;
+            entries.push((tx_hash, tx_meta));
+            iter_mempool_block_hash_tx.next();
+        }
+
+        let mut iter_block_hash_tx = self.db.raw_iterator_cf(self.cf_block_height_tx_idx());
+        let mut seek_key = block_hash_tx_prefix.as_bytes().to_vec();
+        inc_bytes(&mut seek_key);
+        iter_block_hash_tx.seek(seek_key);
+        iter_block_hash_tx.prev();
+        while let (Some(key), Some(value)) = (iter_block_hash_tx.key(), iter_block_hash_tx.value()) {
+            let tx_hash: [u8; 32] = (&value[..]).try_into().unwrap();
+            let block_hash_tx_prefix: BlockHashWithTxPartialPrefix = bincode::deserialize(&key)?;
+
+            if block_hash_tx_prefix.block_height != block_height {
+                break;
+            }
+
+            let tx_meta = self.tx_meta(value)?.ok_or_else(|| anyhow!("Unindexed txs"))?;
+            entries.push((tx_hash, tx_meta));
+            iter_block_hash_tx.prev();
+        }
+        Ok(entries)
     }
 
     pub fn address(&self, address: &Address<'_>, skip: usize, take: usize) -> Result<Vec<([u8; 32], AddressTx, TxMeta)>> {
@@ -424,6 +488,7 @@ impl IndexDb {
         self.update_addr_utxo_set(&mut batch, &txs, false).with_context(|| "update_addr_utxo_set")?;
         self.update_utxo_set(&mut batch, &txs, false).with_context(|| "update_utxo_set")?;
         for tx in txs {
+            self.add_block_height_tx_idx(&mut batch, tx, false).with_context(|| "add_block_height_tx_idx")?;
             self.add_tx_meta(&mut batch, tx, false).with_context(|| "add_tx_meta")?;
             self.add_addr_tx_meta(&mut batch, tx, false).with_context(|| "add_addr_tx_meta")?;
             self.add_tx_out_spend(&mut batch, tx, false).with_context(|| "add_tx_out_spend")?;
@@ -440,6 +505,7 @@ impl IndexDb {
         self.update_addr_utxo_set(&mut batch, &txs, true).with_context(|| "update_addr_utxo_set")?;
         self.update_utxo_set(&mut batch, &txs, true).with_context(|| "update_utxo_set")?;
         for tx in txs {
+            self.add_block_height_tx_idx(&mut batch, tx, true).with_context(|| "add_block_height_tx_idx")?;
             self.add_tx_meta(&mut batch, tx, true).with_context(|| "add_tx_meta")?;
             self.add_addr_tx_meta(&mut batch, tx, true).with_context(|| "add_addr_tx_meta")?;
             self.add_tx_out_spend(&mut batch, tx, true).with_context(|| "add_tx_out_spend")?;
@@ -610,6 +676,16 @@ impl IndexDb {
                 batch.put_cf(cf, addr_tx_key.as_bytes(), bincode::serialize(&addr_tx)?);
             }
         }
+        Ok(())
+    }
+
+    fn add_block_height_tx_idx(&self, batch: &mut WriteBatch, tx: &bchrpc::Transaction, is_mempool: bool) -> Result<()> {
+        let cf = if is_mempool { self.cf_mempool_block_height_tx_idx() } else { self.cf_block_height_tx_idx() };
+        let block_height_tx_idx_prefix = BlockHashWithTxPartialPrefix {
+            block_height: tx.block_height,
+            tx_partial_hash: tx.hash.as_slice()[..16].try_into().unwrap()
+        };
+        batch.put_cf(cf, bincode::serialize(&block_height_tx_idx_prefix)?, &tx.hash);
         Ok(())
     }
 

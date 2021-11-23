@@ -1,11 +1,12 @@
 use std::{collections::HashMap, convert::Infallible, net::SocketAddr, sync::Arc};
+use std::fs;
 
 use anyhow::{Result, Context};
 use indexdb::IndexDb;
-use indexer::Indexer;
+use indexer::{Indexer, IndexerProduction, IndexerDevelopment};
 use server::Server;
 use warp::{Filter, Rejection, Reply, hyper::StatusCode};
-use serde::Serialize;
+use serde::{Serialize};
 
 mod blockchain;
 mod formatting;
@@ -14,11 +15,13 @@ mod server;
 mod indexdb;
 mod indexer;
 mod primitives;
+mod config;
+mod mocker;
 
 type ServerRef = Arc<Server>;
 
 fn with_server(
-    server: &ServerRef,
+    server: &Arc<Server>,
 ) -> impl Filter<Extract = (ServerRef,), Error = std::convert::Infallible> + Clone {
     let server = Arc::clone(&server);
     warp::any().map(move || Arc::clone(&server))
@@ -26,19 +29,28 @@ fn with_server(
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    let config_string = fs::read_to_string("config.toml")?;
+    let config = config::load_config(&config_string)?;
+
     let host: SocketAddr = "0.0.0.0:3035"
         .parse()
         .with_context(|| "Invalid host in config")?;
 
     //let db = Db::open("../db.sled")?;
-    let indexdb = IndexDb::open("../index.rocksdb")?;
-    let indexer = Arc::new(Indexer::connect(indexdb).await?);
+    let indexdb = IndexDb::open(&config.index_database)?;
+
+    let indexer_instance: Box<Arc<dyn Indexer>> = if config.mode == config::Modes::Production {
+        Box::new(Arc::new(IndexerProduction::connect(indexdb).await?))
+    } else {
+        Box::new(Arc::new(IndexerDevelopment::connect(indexdb).await?))
+    };
+
     tokio::spawn({
-        let indexer = Arc::clone(&indexer);
-        indexer.run_indexer()
+        let indexer_clone = Arc::clone(&indexer_instance);
+        indexer_clone.run_indexer()
     });
 
-    let server = Arc::new(Server::setup(indexer).await?);
+    let server = Arc::new(Server::setup(indexer_instance).await?);
 
     let dashboard = warp::path::end()
         .and(with_server(&server))

@@ -30,8 +30,20 @@ pub fn render_byte_size(size: u64, is_long: bool) -> Markup {
 
 pub fn render_integer_with_commas(int: u64) -> Markup {
     let string = int.to_formatted_string(&Locale::en);
+    let parts = string.split(",").collect::<Vec<_>>();
+
     html! {
-        span { (string) }
+        @if parts.len() == 1 {
+            span { (string) }
+        } @else {
+            @for (idx, part) in parts.iter().enumerate() {
+                span { (part) }
+
+                @if (idx + 1) != parts.len() {
+                    span.non-selectable { "," }
+                }
+            }
+        }
     }
 }
 

@@ -7,6 +7,10 @@ h1, h2, h3, h4, h5 {
   display: none;
 }
 
+.non-selectable {
+  user-select: none;
+}
+
 .homepage__welcome  {
   min-height: calc(100% - 50px - 56px - 1rem - 50px);
   padding-top: 48px;

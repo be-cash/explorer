@@ -33,6 +33,7 @@ async-trait = "0.1.51"
 ctrlc = "3.2.1"
 rand = "0.8.4"
 sha2 = "0.9.8"
+askama = "0.10.5"
 
 [build-dependencies]
 tonic-build = "0.3"

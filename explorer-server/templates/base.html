@@ -1,0 +1,71 @@
+<!doctype html>
+<html class="no-js" lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <title>be.cash Block Explorer</title>
+
+  <meta name="description" content="">
+
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <meta property="og:title" content="">
+  <meta property="og:type" content="">
+  <meta property="og:url" content="">
+  <meta property="og:image" content="">
+
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+
+  <link rel="apple-touch-icon" href="icon.png">
+  <!-- Place favicon.ico in the root directory -->
+
+  <link rel="stylesheet" href="css/normalize.css">
+  <link rel="stylesheet" href="css/style.css">
+
+  <link rel="stylesheet" href="/code/webix/webix.min.css">
+  <link rel="stylesheet" href="/code/semantic-ui/semantic.min.css">
+  <link rel="stylesheet" href="/code/styles/index.css">
+  <link rel="preconnect" href="https://fonts.gstatic.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Ubuntu+Mono&display=swap">
+
+  <link rel="manifest" href="site.webmanifest">
+  <meta name="theme-color" content="#fafafa">
+
+  <script src="https://code.jquery.com/jquery-3.1.1.min.js" integrity="sha256-hVVnYaiADRTO2PzUGmuLJr8BLUSjGIZsDYGmIJLv2b8=" crossorigin="anonymous"></script>
+  <script type="text/javascript" src="/code/semantic-ui/semantic.min.js?v=0"></script>
+  <script type="text/javascript" src="/code/webix/webix.min.js?v=8.1.0"></script>
+  <script type="text/javascript" src="/code/moment.min.js?v=0"></script>
+  <script type="text/javascript" src="/code/common.js"></script>
+</head>
+
+<body>
+  <div class="ui main menu">
+    <a class="header item" href="/">
+      <img class="logo" src="/assets/logo.png" />
+    </a>
+
+    <div class="item">
+      <div id="#search-box" class="ui transparent icon input">
+        <input
+          id="#search-bar"
+          type="text"
+          placeholder="Search blocks, transactions, adddresses, tokens..."
+          onchange="searchBarChange()"
+          onkeyup="searchBarChange()"
+        >
+          <i id="#search-button" class="search link icon" onclick="searchButton()"></i>
+        </input>
+      </div>
+    </div>
+
+    <a class=" right floated item" href="/blocks">Blocks</a>
+  </div>
+
+  {% block content %}{% endblock %}
+
+  <div id="footer" class="ui inverted vertical footer segment">
+    <div class="ui container">be.cash Explorer</div>
+  </div>
+</body>
+</html>

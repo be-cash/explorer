@@ -7,6 +7,7 @@ use chrono::{Utc, TimeZone};
 use chrono_humanize::HumanTime;
 use std::{borrow::Cow, collections::{BTreeSet, HashMap, hash_map::Entry}, convert::{TryInto, TryFrom}, sync::Arc};
 use zerocopy::{AsBytes, byteorder::{I32, U32}};
+use askama::Template;
 
 use crate::{blockchain::{BlockHeader, Destination, destination_from_script, is_coinbase, from_le_hex, to_legacy_address, to_le_hex}, formatting::{render_amount, render_byte_size, render_difficulty, render_integer, render_integer_smallify, render_sats}, grpc::bchrpc, indexdb::{AddressBalance, TxOutSpend}, indexer::Indexer, primitives::{SlpAction, TokenMeta, TxMeta, TxMetaVariant}};
 
@@ -14,6 +15,11 @@ pub struct Server {
     indexer: Arc<dyn Indexer>,
     satoshi_addr_prefix: &'static str,
     tokens_addr_prefix: &'static str,
+}
+
+#[derive(Template)]
+#[template(path = "pages/homepage.html")]
+struct Homepage {
 }
 
 impl Server {
@@ -29,39 +35,8 @@ impl Server {
 
 impl Server {
     pub async fn dashboard(&self) -> Result<impl Reply> {
-        let markup = html! {
-            (DOCTYPE)
-            head {
-                meta charset="utf-8";
-                title { "be.cash Block Explorer" }
-                (self.head_common())
-            }
-            body {
-                (self.toolbar())
-
-                .ui.container.homepage__welcome {
-                    h1 {
-                        "Welcome to the be.cash Block Explorer"
-                    }
-                    p {
-                        "We welcome your feedback and bug reports to contact@be.cash."
-                    }
-                }
-
-                .homepage__ludwig {
-                    .homepage__ludwig-circle {}
-                    img.homepage__ludwig-image src="/assets/ludwig.png" {}
-                }
-
-                .ocean {
-                    .wave { }
-                    .wave { }
-                }
-                
-                (self.footer())
-            }
-        };
-        Ok(warp::reply::html(markup.into_string()))
+        let homepage = Homepage {  };
+        Ok(warp::reply::html(homepage.render().unwrap_or(String::from("<p>hello</p>"))))
     }
 
     fn render_pagination(&self, page: usize, last_page: usize, curated_page_offsets: &[usize], query_str: &str) -> Markup {

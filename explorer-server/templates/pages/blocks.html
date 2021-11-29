@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <div class="ui container">
+    <div id="blocks-table"></div>
+  </div>
+
+  <div class="bottom-pagination">
+    <p></p>
+    <div class="ui pagination menu">
+      {% for page in pages %}
+        {% if pages|not_contains(page) %}
+          {% if pages|pagination_prev_enabled(page) %}
+            <a class="item" href="{{ query_string }}{{ page|checked_sub(2) }}">
+              {{ page|checked_sub(1) }}
+            </a>
+          {% else %}
+            <div class="item disabled">
+              ...
+            </div>
+          {% endif %}
+        {% endif %}
+
+        <a class="item" href="{{ query_string }}{{ page }}">
+          {{ page }}
+        </a>
+      {% endfor %}
+    </div>
+  </div>
+
+  <script type="text/javascript" src="/data/blocks/{{ first_page_begin }}/{{ first_page_end }}/dat.js?v=0.2"></script>
+  <script type="text/javascript" src="/data/blocks/{{ second_page_begin }}/{{ second_page_end }}/dat.js?v=0.2"></script>
+  <script type="text/javascript" src="/code/blocks.js"></script>
+{% endblock %}

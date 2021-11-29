@@ -320,6 +320,25 @@ table.tx-details-table tr:last-child td {
   height: 100%;
 }
 
+.tx-transaction__inputs,
+.tx-transaction__middle,
+.tx-transaction__outputs {
+  padding-top: 1rem;
+  padding-bottom: 1rem;
+}
+
+.tx-transaction__inputs {
+  width: 47.5%;
+}
+
+.tx-transaction__middle {
+  width: 5%;
+}
+
+.tx-transaction__outputs {
+  width: 47.5%;
+}
+
 .tx-transaction__toggle-wrapper {
   display: flex;
   height: 100%;

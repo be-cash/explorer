@@ -31,6 +31,7 @@ webpki = "*"
 toml = "0.5"
 async-trait = "0.1.51"
 askama = "0.10.5"
+humansize = "1.1.1"
 
 [build-dependencies]
 tonic-build = "0.3"

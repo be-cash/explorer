@@ -1,7 +1,7 @@
 use std::net::SocketAddr;
 
-use anyhow::{Result};
-use serde::{Deserialize};
+use anyhow::Result;
+use serde::Deserialize;
 
 #[derive(Deserialize, Debug, PartialEq)]
 #[serde(rename_all = "lowercase")]

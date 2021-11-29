@@ -265,8 +265,7 @@ h1, h2, h3, h4, h5 {
 }
 
 .wave:nth-of-type(2) {
-  /* top: -175px; */
-  /* background: url(../../assets/wave.svg) repeat-x; */
+  top: -175px;
   animation: wave 66s cubic-bezier( 0.36, 0.45, 0.63, 0.53) -.125s infinite, swell 14s ease -1.25s infinite;
   opacity: 1;
 }

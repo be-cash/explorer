@@ -1,0 +1,143 @@
+{% macro render(variant, token_meta) %}
+  {% match token_meta %}
+    {% when Some with (token_meta) %}
+      {% match variant %}
+        {% when TxMetaVariant::Slp with { action, token_input, token_output, token_id } %}
+          {% let ticker = token_meta.token_ticker|string_from_lossy_utf8 %}
+          {% let action_str = action|get_action_string %}
+
+          <h2>
+            <a href="/tx/{{ token_id.to_vec()|hexify_u8_vector }}">{{ ticker }}</a>
+            Token {{ action_str }} Transaction
+          </h2>
+
+          <table class="ui table">
+            <tbody>
+              <tr>
+                <td>Token ID</td>
+                <td>
+                  <div class="hex">{{ token_id.to_vec()|hexify_u8_vector }}</div>
+                </td>
+              </tr>
+              <tr>
+                <td>Token Name</td>
+                <td>{{ token_meta.token_name|string_from_lossy_utf8 }}</td>
+              </tr>
+              <tr>
+                <td>Token Type</td>
+                <td>
+                  {% let token_type = token_meta.token_type|get_token_type %}
+
+                  {% if token_type == "Type1" %}
+                    Type1 (
+                    <a href="https://github.com/simpleledger/slp-specifications/blob/master/slp-token-type-1.md">
+                      Specification
+                    </a>
+                    )
+                  {% else if token_type == "NFT1 Child" %}
+                    NFT1 Child (
+                    <a href="https://github.com/simpleledger/slp-specifications/blob/master/slp-nft-1.md">
+                      Specification
+                    </a>
+                    )
+                  {% else if token_type == "NFT1 Group" %}
+                    NFT1 Group (
+                    <a href="https://github.com/simpleledger/slp-specifications/blob/master/slp-nft-1.md">
+                      Specification
+                    </a>
+                    )
+                  {% else %}
+                    Unknown type: {{ token_meta.token_type }} }
+                  {% endif %}
+                </td>
+              </tr>
+              <tr>
+                <td>Transaction Type</td>
+                <td>{{ action_str }}</td>
+              </tr>
+              <tr>
+                <td>Token Output</td>
+                <td>
+                  {{ token_output|render_token_amount(token_meta.decimals) }} {{ ticker }}
+                  {% if token_output < token_input %}
+                    <br />
+                    ({{ (token_input - token_output)|render_token_amount(token_meta.decimals) }} {{ ticker }} burned)
+                  {% endif %}
+                </td>
+              </tr>
+              <tr>
+                <td>Document URI</td>
+                <td>
+                  {% let token_url = token_meta.token_document_url|string_from_lossy_utf8 %}
+                  <a href="{{ token_url }}" target="_blank">{{ token_url }}</a>
+                </td>
+              </tr>
+              <tr>
+                <td>Document Hash</tr>
+                <td>
+                  {% match token_meta.token_document_url.len() %}
+                    {% when 0 %}
+                      <div class="ui black horizontal label">Not set</div>
+                    {% when _ %}
+                      <div class="hex">{{ token_meta.token_document_hash|hexify_u8_vector }}</div>
+                  {% endmatch %}
+                </td>
+              </tr>
+              <tr>
+                <td>Decimals</td>
+                <td>{{ token_meta.decimals }}</div>
+              </tr>
+            </tbody>
+          </table>
+
+        {% when TxMetaVariant::InvalidSlp with { token_id, token_input } %}
+          {% let ticker = token_meta.token_ticker|string_from_lossy_utf8 %}
+
+          <h2>Invalid Token Transaction ({{ ticker}})</h2>
+
+          <table class="ui table">
+            <tbody>
+              <tr>
+                <td>Token ID</td>
+                <td>
+                  <div class="hex">{{ token_id|hexify_u8_vector }}</div>
+                </td>
+              </tr>
+              <tr>
+                <td>Token Name</td>
+                <td>{{ token_meta.token_name|string_from_lossy_utf8 }}</td>
+              </tr>
+              <tr>
+                <td>Tokens burned</td>
+                <td>{{ token_input|render_token_amount(token_meta.decimals) }} {{ ticker }}</td>
+              </tr>
+            </tbody>
+          </table>
+
+        {% when _ %}
+      {% endmatch %}
+    {% when None %}
+      {#
+      {% match variant %}
+        {% when TxMetaVariant::InvalidSlp with { token_id, token_input } %}
+            <h2>Invalid Token Transaction (unknown token)</h2>
+
+            <table class="ui table">
+              <tbody>
+                <tr>
+                  <td>Token ID</td>
+                  <td>
+                    <div class="hex" >{{ token_id|hexify_u8_vector }}</div>
+                  </td>
+                </tr>
+                <tr>
+                  <td>Tokens burned</td>
+                  <td>{{ token_input|render_integer|safe }}</td>
+                </tr>
+              </tbody>
+            </table>
+        {% when None %}
+      {% endmatch %}
+      #}
+  {% endmatch %}
+{% endmacro %}

@@ -1,0 +1,175 @@
+{% extends "base.html" %}
+
+{% import "components/input.html" as input %}
+{% import "components/output.html" as output %}
+{% import "components/token_info_table.html" as token_info_table %}
+
+{% block content %}
+  <div class="ui container">
+    <div class="ui grid">
+      <div class="ten wide column">
+        <h1>{{ title }}</h1>
+      </div>
+
+      <div class="six wide column">
+        <div class="tx-transaction__toggle-wrapper">
+          <div class="ui slider checkbox tx-transaction__toggle">
+            <input type="checkbox" onclick="$('#raw-hex').toggle()" />
+            <label>Show raw hex</label>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="tx-hash" class="ui segment">
+      <strong>Transaction ID: </strong>
+      <span class="hex">{{ tx_hash_string }}</span>
+
+      {% if tx.tx_meta.is_coinbase %}
+        <div class="ui green horizontal label">Coinbase</div>
+      {% endif %}
+    </div>
+
+    <div id="raw-hex" class="ui segment" style="display: none;">
+      <h4>Raw Transaction Hex</h4>
+      <div class="hex">{{ tx.raw_tx|hexify_u8_vector }}</div>
+    </div>
+
+    <h2>Details</h2>
+    <div class="ui grid segment tx-details">
+      <table class="tx-details-table ui very basic table">
+        <tbody>
+          <tr>
+            <td>Age</td>
+            <td>{{ timestamp|human_time }}</td>
+          </tr>
+
+          <tr>
+            <td>Block</td>
+            <td>
+              {% match block_meta %}
+                {% when Some with (_) %}
+                  <a href="/block/{{ tx.transaction.block_hash|to_le_hex }}">
+                    {{ tx.transaction.block_height|i32_to_u64|render_integer }} ({{ confirmations|u32_to_u64|render_integer }}  confirmations)
+                  </a>
+                {% when None %}
+                  Not mined yet
+              {% endmatch %}
+            </td>
+          </tr>
+
+          <tr>
+            <td>Unix Timestamp</td>
+            <td>
+              {% match block_meta %}
+                {% when Some with (block_meta) %}
+                  {{ block_meta.timestamp|i64_to_u64|render_integer|safe }}
+                {% when None %}
+                  Not mined yet
+              {% endmatch %}
+            </td>
+          </tr>
+
+          <tr>
+            <td>Size</td>
+            <td>{{ tx.transaction.size|i32_to_u64|render_human_size }} ({{ tx.transaction.size|i32_to_u64|render_integer|safe }} B)</td>
+          </tr>
+
+          <tr>
+            <td>Locktime</td>
+            <td>{{ tx.transaction.lock_time|u32_to_u64|render_integer|safe }}</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="ui vertical divider tx-details-table__divider"></div>
+
+      <table class="tx-details-table ui very basic table">
+        <tbody>
+          <tr>
+            <td>Mined on</td>
+            {% match block_meta %}
+              {% when Some with (block_meta) %}
+                <td class="moment__timestamp" data-timestamp="{{ block_meta.timestamp }}"></td>
+              {% when None %}
+                <td>Not mined yet</td>
+            {% endmatch %}
+          </tr>
+
+          <tr>
+            <td>Total Input</td>
+            <td>{{ tx.tx_meta.sats_input|render_sats|safe }} XEC</td>
+          </tr>
+
+          <tr>
+            <td>Total Output</td>
+            <td>{{ tx.tx_meta.sats_output|render_sats|safe }} XEC</td>
+          </tr>
+
+          <tr>
+            <td>Fee</td>
+            <td>{{ (tx.tx_meta.sats_input - tx.tx_meta.sats_output)|max(0)|render_sats|safe }} XEC</td>
+          </tr>
+
+          <tr>
+            <td>Version</td>
+            <td>{{ tx.transaction.version }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    {% if is_token %}
+      <h2>Token Info</h2>
+      <div class="ui grid segment tx-details">
+        {% call token_info_table::render(tx.tx_meta.variant, tx.token_meta) %}
+      </div>
+    {% endif %}
+
+    <div class="ui grid">
+      <div class="ten wide column">
+        <h2>Transaction</h2>
+      </div>
+
+      <div class="six wide column">
+        <div class="tx-transaction__toggle-wrapper">
+          <div class="ui slider checkbox tx-transaction__toggle">
+            <input type="checkbox" onclick="toggleTransactionScriptData()">
+            <label>Show all scripts</label>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="ui grid segment">
+      <div class="seven wide column">
+        <h4>Inputs ({{ tx.transaction.inputs.len() }})</h4>
+        <table id="inputs" class="ui very basic table">
+          <tbody>
+            {% for input in tx.transaction.inputs %}
+              {% call input::render(input, tx.token_meta) %}
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="two wide column">
+        <div class="tx-transaction__arrow-separator">
+          <i class="big icon arrow right"></i>
+        </div>
+      </div>
+
+      <div class="seven wide column">
+        <h4>Outputs ({{ tx.transaction.outputs.len() }})</h4>
+
+        <table id="outputs" class="ui very basic table">
+          <tbody>
+            {% for output in tx.transaction.outputs %}
+              {% call output::render(output, tx.token_meta, tx.tx_out_spends) %}
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+{% endblock %}

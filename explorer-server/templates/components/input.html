@@ -1,0 +1,82 @@
+{% macro render(tx_input, token_meta) %}
+  {% let is_token = tx_input.slp_token|check_is_token %}
+  {% let outpoint = tx_input.outpoint.as_ref().expect("No outpoint") %}
+  {% let destination = tx_input.previous_script|destination_from_script(is_token) %}
+  {% let input_script = tx_input.signature_script|get_script %}
+
+  <tr>
+    {% if outpoint|check_is_coinbase %}
+      <td>
+        <div class="ui green horizontal label">Coinbase</div>
+      </td>
+    {% else %}
+      <td>
+        <a href="/tx/{{ outpoint.hash|to_le_hex }}">
+          <i class="horizontally flipped icon sign out"></i>
+        </a>
+      </td>
+      <td>
+        {{ tx_input.index }}
+      </td>
+      <td>
+        {% if is_token %}
+          <img src="/assets/slp-logo.png" />
+        {% endif %}
+      </td>
+      <td>
+        <div class="destination hex">
+          {% match destination %}
+            {% when Destination::Address with (address) %}
+              <a href="/address/{{ address.cash_addr() }}">
+                {{ address.cash_addr() }}
+              </a>
+            {% when Destination::P2PK with (pubkey) %}
+              Pubkey: {{ pubkey|hexify_u8_vector }}
+            {% when Destination::Unknown with (_bytes) %}
+              Unknown
+            {% when Destination::Nulldata with (_ops) %}
+              Unreachable
+          {% endmatch %}
+        </div>
+      </td>
+    {% endif %}
+    <td>
+      <div class="amount hex">
+        {% match tx_input.slp_token %}
+          {% when Some with (slp) %}
+            {% match token_meta %}
+              {% when Some with (token) %}
+                {% if slp.amount > 0 || slp.is_mint_baton %}
+                  {% if slp.is_mint_baton %}
+                    <div class="ui green horizontal label">Mint baton</div>
+                  {% else %}
+                    {{ slp.amount|render_token_amount(slp.decimals)|safe }} {{ token.token_ticker|string_from_lossy_utf8 }}
+                  {% endif %}
+                {% endif %}
+
+                <div>
+                  <small>{{ tx_input.value|render_sats|safe }} XEC</small>
+                </div>
+              {% when None %}
+                {{ tx_input.value|render_sats|safe }} XEC
+            {% endmatch %}
+          {% when None %}
+            {{ tx_input.value|render_sats|safe }} XEC
+        {% endmatch %}
+      </div>
+    </td>
+  </tr>
+  <tr class="tx-transaction__script-data hidden">
+    <td colspan="1"></td>
+    <td colspan="5">
+      <p>
+        <strong>Script Hex</strong>
+        <div class="hex">{{ tx_input.signature_script|hexify_u8_vector }}</div>
+      </p>
+      <p>
+        <strong>Script Decoded</strong>
+        <div class="hex">{{ input_script }}</div>
+      </p>
+    </td>
+  </tr>
+{% endmacro %}

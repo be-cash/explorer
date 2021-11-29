@@ -1,0 +1,93 @@
+{% macro render(tx_output, token_meta, tx_out_spends) %}
+  {% let is_token = tx_output.slp_token|check_is_token %}
+  {% let destination = tx_output.pubkey_script|destination_from_script(is_token) %}
+  {% let output_script = tx_output.pubkey_script|get_script %}
+
+  <tr>
+    <td>
+      {% let tx_out_spend_element = tx_out_spends.get(tx_output.index) %}
+      {% match tx_out_spend_element %}
+        {% when Some with (tx_out_spend_or_none) %}
+          {% match tx_out_spend_or_none %}
+            {% when Some with (tx_out_spend) %}
+              <a href="/tx/{{ tx_out_spend.by_tx_hash|to_le_hex }}">
+                <i class="icon sign out"></i>
+              </a>
+            {% when None %}
+          {% endmatch %}
+        {% when Some with (None) %}
+        {% when None %}
+          {# 
+            {% match destination %}
+              {% when Destination::Nulldata with (_) %}
+                <i class="icon sticky note outline"></i>
+              {% when None %}
+                <i class="icon question"></i>
+            {% endmatch %}
+          #}
+      {% endmatch %}
+    </td>
+    <td>{{ tx_output.index }}</td>
+    <td>
+      {% if is_token %}
+        <img src="/assets/slp-logo.png" />
+      {% endif %}
+    </td>
+    <td>
+      <div class="destination hex">
+        {% match destination %}
+          {% when Destination::Address with (address) %}
+            <a href="/address/{{ address.cash_addr() }}">
+              {{ address.cash_addr() }}
+            </a>
+          {% when Destination::Nulldata with (_ops) %}
+            OP_RETURN data
+          {% when Destination::P2PK with (pubkey) %}
+            Pubkey: {{ pubkey|hexify_u8_vector }},
+          {% when Destination::Unknown with (_bytes) %}
+            Unknown
+        {% endmatch %}
+      </div>
+    </td>
+    <td>
+      <div class="amount hex">
+        {% match tx_output.slp_token %}
+          {% when Some with (slp) %}
+            {% match token_meta %}
+              {% when Some with (token) %}
+                {% if slp.amount > 0 || slp.is_mint_baton %}
+                  {% if slp.is_mint_baton %}
+                    <div class="ui green horizontal label">Mint baton</div>
+                  {% else %}
+                    {{ slp.amount|render_token_amount(slp.decimals)|safe }} {{ token.token_ticker|string_from_lossy_utf8 }}
+                  {% endif %}
+                {% endif %}
+
+                <div>
+                  <small>{{ tx_output.value|render_sats|safe }} XEC</small>
+                </div>
+              {% when Some with (_) %}
+                <div class="ui green horizontal label">Mint baton</div>
+              {% when None %}
+                {{ tx_output.value|render_sats|safe }} XEC
+            {% endmatch %}
+          {% when None %}
+            {{ tx_output.value|render_sats|safe }} XEC
+        {% endmatch %}
+      </div>
+    </td>
+  </tr>
+  <tr class="tx-transaction__script-data hidden">
+    <td colspan="1"></td>
+    <td colspan="5">
+      <p>
+        <strong>Script Hex</script>
+        <div class="hex">{{ tx_output.pubkey_script|hexify_u8_vector }}</div>
+      </p>
+      <p>
+        <strong>Script Decoded</strong>
+        <div class="hex">{{ output_script }}</div>
+      </p>
+    </td>
+  </tr>
+{% endmacro %}

@@ -9,14 +9,15 @@ use warp::{Filter, Rejection, Reply, hyper::StatusCode};
 use serde::{Serialize};
 
 mod blockchain;
-mod formatting;
 mod grpc;
 mod server;
+mod server_primitives;
 mod indexdb;
 mod indexer;
 mod primitives;
 mod config;
 mod mocker;
+mod templating;
 
 type ServerRef = Arc<Server>;
 
@@ -55,7 +56,7 @@ async fn main() -> Result<()> {
     let dashboard = warp::path::end()
         .and(with_server(&server))
         .and_then(|server: ServerRef| async move {
-            server.dashboard().await.map_err(err)
+            server.homepage().await.map_err(err)
         });
 
     let blocks = warp::path!("blocks")

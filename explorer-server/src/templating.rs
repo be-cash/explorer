@@ -22,6 +22,7 @@ pub struct BlocksTemplate<'a> {
     pub first_page_end:  u32,
     pub second_page_begin: u32,
     pub second_page_end: u32,
+    pub last_block_height: u32,
 }
 
 #[derive(Template)]

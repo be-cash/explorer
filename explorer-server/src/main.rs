@@ -94,7 +94,7 @@ async fn main() -> Result<()> {
         });
 
     let data_blocks =
-        warp::path!("data" / "blocks" / u32 / u32 / "dat.js")
+        warp::path!("api" / "blocks" / u32 / u32 )
         .and(with_server(&server))
         .and_then(|start_height, end_height, server: ServerRef| async move {
             server.data_blocks(start_height, end_height).await.map_err(err)

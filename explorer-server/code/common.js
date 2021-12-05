@@ -99,3 +99,7 @@ function toggleTransactionScriptData() {
     $(this).toggleClass('hidden');
   });
 }
+
+function minifyHash(hash) {
+  return `${hash.slice(0, 25)}...${hash.slice(39, 64)}`;
+}

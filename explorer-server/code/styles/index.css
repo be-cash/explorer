@@ -367,6 +367,31 @@ table.tx-details-table tr:last-child td {
   text-align: right;
 }
 
+.block-listing__datatable-container {
+  margin-top: 10px;
+}
+
+.datatable__block_listing
+.webix_dtable,
+.webix_view {
+  border: 0;
+}
+
+.datatable__block_listing
+.webix_ss_header,
+.webix_hs_center,
+.webix_hcolumn,
+.webix_hcell {
+  background: transparent;
+  border: 0;
+  font-weight: 700;
+  border-bottom-color: rgb(251, 123, 129)!important;
+}
+
+.datatable__block_listing-hover {
+  background: rgba(251, 123, 129, 0.1);
+}
+
 .loader__container {
   width: 100%;
 }

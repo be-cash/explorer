@@ -89,6 +89,7 @@ impl Server {
             first_page_end: first_page_end,
             second_page_begin: second_page_begin,
             second_page_end: second_page_end,
+            last_block_height: best_height,
         };
         Ok(warp::reply::html(blocks_template.render().unwrap()))
     }
@@ -123,32 +124,8 @@ impl Server {
                 num_txs: block.num_txs,
             });
         }
-        let encoded_blocks = serde_json::to_string(&json_blocks)?;
-        let reply = format!(r#"
-            if (window.blockData === undefined)
-                window.blockData = [];
-            {{
-                var blocks = JSON.parse('{encoded_blocks}');
-                var startIdx = window.blockData.length;
-                window.blockData.length += blocks.length;
-                for (var i = 0; i < blocks.length; ++i) {{
-                    var block = blocks[i];
-                    window.blockData[startIdx + i] = {{
-                        hash: block.hash,
-                        height: block.height,
-                        version: block.version,
-                        timestamp: new Date(block.timestamp * 1000),
-                        difficulty: block.difficulty,
-                        size: block.size,
-                        medianTime: block.medianTime,
-                        numTxs: block.numTxs,
-                    }};
-                }}
-            }}
-        "#, encoded_blocks = encoded_blocks);
-        let reply = warp::reply::with_header(reply, "content-type", "application/javascript");
-        let reply = warp::reply::with_header(reply, "last-modified", "Tue, 29 Dec 2020 06:31:27 GMT");
-        Ok(reply)
+
+        Ok(serde_json::to_string(&json_blocks)?)
     }
 }
 

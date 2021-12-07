@@ -2,7 +2,7 @@ use std::{collections::HashMap, convert::Infallible, sync::Arc, fs};
 
 use anyhow::{Result, Context};
 use indexdb::IndexDb;
-use indexer::Indexer;
+use indexer::{Indexer, IndexerProduction};
 use server::Server;
 use warp::{Filter, Rejection, Reply, hyper::StatusCode};
 use serde::Serialize;
@@ -31,8 +31,10 @@ async fn main() -> Result<()> {
     let config = config::load_config(&config_string)?;
 
     //let db = Db::open("../db.sled")?;
-    let indexdb = IndexDb::open("../index.rocksdb")?;
-    let indexer = Arc::new(Indexer::connect(indexdb).await?);
+    let indexdb = IndexDb::open(&config.index_database)?;
+
+    let indexer: Arc<dyn Indexer> = Arc::new(IndexerProduction::connect(indexdb).await?);
+
     tokio::spawn({
         let indexer = Arc::clone(&indexer);
         indexer.run_indexer()

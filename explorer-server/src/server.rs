@@ -11,13 +11,13 @@ use zerocopy::{AsBytes, byteorder::{I32, U32}};
 use crate::{blockchain::{BlockHeader, Destination, destination_from_script, is_coinbase, from_le_hex, to_legacy_address, to_le_hex}, formatting::{render_amount, render_byte_size, render_difficulty, render_integer, render_integer_smallify, render_sats}, grpc::bchrpc, indexdb::{AddressBalance, TxOutSpend}, indexer::Indexer, primitives::{SlpAction, TokenMeta, TxMeta, TxMetaVariant}};
 
 pub struct Server {
-    indexer: Arc<Indexer>,
+    indexer: Arc<dyn Indexer>,
     satoshi_addr_prefix: &'static str,
     tokens_addr_prefix: &'static str,
 }
 
 impl Server {
-    pub async fn setup(indexer: Arc<Indexer>) -> Result<Self> {
+    pub async fn setup(indexer: Arc<dyn Indexer>) -> Result<Self> {
         let satoshi_addr_prefix = "ecash";
         Ok(Server {
             indexer,

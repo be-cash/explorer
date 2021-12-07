@@ -5,10 +5,24 @@ use tonic::transport::{Certificate, Channel, ClientTlsConfig, Endpoint};
 use tokio::sync::{mpsc, watch};
 use crate::{blockchain::to_le_hex, grpc::bchrpc, indexdb::{BlockBatches, IndexDb, TxOutSpend}, primitives::{TokenMeta, TxMeta}};
 use crate::grpc::bchrpc::bchrpc_client::BchrpcClient;
+use async_trait::async_trait;
 
-pub struct Indexer {
+
+const ALPN_H2: &'static str = "h2";
+const MAX_FETCH_AHEAD: usize = 1000;
+
+#[async_trait]
+pub trait Indexer: Sync + Send {
+    fn db(&self) -> &IndexDb;
+    async fn block_txs(&self, block_hash: &[u8]) -> Result<Vec<([u8; 32], TxMeta)>>;
+    async fn tx(&self, tx_hash: &[u8]) -> Result<Tx>;
+    async fn run_indexer(self: Arc<Self>);
+}
+
+pub struct IndexerProduction {
     db: IndexDb,
     bchd: BchrpcClient<Channel>,
+    max_fetch_ahead: usize,
 }
 
 pub struct Tx {
@@ -33,10 +47,7 @@ impl tokio_rustls::rustls::ServerCertVerifier for NopCertVerifier {
     }
 }
 
-impl Indexer {
-    const ALPN_H2: &'static str = "h2";
-    const MAX_FETCH_AHEAD: usize = 1000;
-
+impl IndexerProduction {
     pub async fn connect(db: IndexDb) -> Result<Self> {
         use std::fs;
         use std::io::Read;
@@ -44,7 +55,7 @@ impl Indexer {
         let mut cert = Vec::new();
         cert_file.read_to_end(&mut cert)?;
         let mut config =  tokio_rustls::rustls::ClientConfig::new();
-        config.set_protocols(&[Vec::from(&Self::ALPN_H2[..])]);
+        config.set_protocols(&[Vec::from(&ALPN_H2[..])]);
         let mut dangerous_config =  tokio_rustls::rustls::DangerousClientConfig {
             cfg: &mut config,
         };
@@ -54,71 +65,49 @@ impl Indexer {
             .rustls_client_config(config);
         let endpoint = Endpoint::from_static("https://api2.be.cash:8445").tls_config(tls_config)?;
         let bchd = BchrpcClient::connect(endpoint).await?;
-        Ok(Indexer { bchd, db })
+        Ok(IndexerProduction { bchd, db, max_fetch_ahead: MAX_FETCH_AHEAD })
     }
 
-    pub fn db(&self) -> &IndexDb {
-        &self.db
-    }
-
-    pub async fn block_txs(&self, block_hash: &[u8]) -> Result<Vec<([u8; 32], TxMeta)>> {
-        use bchrpc::{GetBlockRequest, get_block_request::HashOrHeight, block::transaction_data::TxidsOrTxs};
+    async fn index_thread(
+        &self,
+        current_height_atomic: Arc<AtomicUsize>,
+        mut send_batches: mpsc::Sender<BlockBatches>,
+        mut watch_height_receiver: watch::Receiver<usize>,
+    ) -> Result<()> {
+        use bchrpc::{GetBlockRequest, get_block_request::HashOrHeight};
         let mut bchd = self.bchd.clone();
-        let block = bchd.get_block(GetBlockRequest {
-            full_transactions: false,
-            hash_or_height: Some(HashOrHeight::Hash(block_hash.to_vec()))
-        }).await?;
-        let block = block.get_ref().block.as_ref().ok_or_else(|| anyhow!("Block not found"))?;
-        let txs = block.transaction_data.iter().map(|tx_data| -> Result<_> {
-            match &tx_data.txids_or_txs {
-                Some(TxidsOrTxs::TransactionHash(tx_hash)) => {
-                    let tx_hash: [u8; 32] = tx_hash.as_slice().try_into()?;
-                    let tx_meta = self.db().tx_meta(&tx_hash)?.ok_or_else(|| anyhow!("Unindexed txs"))?;
-                    Ok((tx_hash, tx_meta))
+        loop {
+            let block_height = current_height_atomic.fetch_add(1, Ordering::SeqCst);
+            while *watch_height_receiver.borrow() + self.max_fetch_ahead < block_height {
+                println!("Waiting for BCHD to catch up, fetching block {} but processed only up to {}", block_height, *watch_height_receiver.borrow());
+                watch_height_receiver.recv().await;
+            }
+            let result = bchd.get_block(GetBlockRequest {
+                full_transactions: true,
+                hash_or_height: Some(HashOrHeight::Height(block_height as i32)),
+            }).await;
+            match result {
+                Ok(block) => {
+                    if let Some(block) = &block.get_ref().block {
+                        let batches = match self.db.make_block_batches(block) {
+                            Ok(batches) => batches,
+                            Err(err) => {
+                                println!("make_block_batches (height {}): {:?}", block_height, err);
+                                return Err(err);
+                            },
+                        };
+                        let _ = send_batches.send(batches).await.map_err(|_| println!("Send failed"));
+                    }
                 }
-                _ => bail!("Invalid tx hash"),
+                Err(err) if err.message() == "block not found" => {
+                    return Ok(());
+                }
+                Err(err) => {
+                    println!("Error message ({}): {}", block_height, err.message());
+                    println!("Error detail ({}): {}", block_height, String::from_utf8_lossy(&err.details()));
+                    return Err(err.into());
+                }
             }
-        }).collect::<Result<Vec<_>, _>>()?;
-        Ok(txs)
-    }
-
-    pub async fn tx(&self, tx_hash: &[u8]) -> Result<Tx> {
-        use bchrpc::{GetTransactionRequest, GetRawTransactionRequest};
-        let mut bchd1 = self.bchd.clone();
-        let mut bchd2 = self.bchd.clone();
-        let (tx, raw_tx) = tokio::try_join!(
-            bchd1.get_transaction(GetTransactionRequest {
-                hash: tx_hash.to_vec(),
-                include_token_metadata: false,
-            }),
-            bchd2.get_raw_transaction(GetRawTransactionRequest {
-                hash: tx_hash.to_vec(),
-            }),
-        )?;
-        let tx = tx.get_ref();
-        let tx = tx.transaction.as_ref().ok_or_else(|| anyhow!("No tx found"))?;
-        let raw_tx = raw_tx.get_ref();
-        let tx_meta = self.db.tx_meta(tx_hash)?.ok_or_else(|| anyhow!("No tx meta for tx"))?;
-        let tx_out_spends = self.db.tx_out_spends(tx_hash)?;
-        let token_meta = match tx.slp_transaction_info.as_ref() {
-            Some(slp_info) if !slp_info.token_id.is_empty() => {
-                self.db.token_meta(&slp_info.token_id)?
-            }
-            _ => None,
-        };
-        Ok(Tx {
-            transaction: tx.clone(),
-            tx_meta,
-            token_meta,
-            raw_tx: raw_tx.transaction.clone(),
-            tx_out_spends,
-        })
-    }
-
-    pub async fn run_indexer(self: Arc<Self>) {
-        match self.run_indexer_inner().await {
-            Ok(()) => {},
-            Err(err) => eprintln!("Index error: {}", err),
         }
     }
 
@@ -182,49 +171,6 @@ impl Indexer {
         Ok(())
     }
 
-    async fn index_thread(
-        &self,
-        current_height_atomic: Arc<AtomicUsize>,
-        mut send_batches: mpsc::Sender<BlockBatches>,
-        mut watch_height_receiver: watch::Receiver<usize>,
-    ) -> Result<()> {
-        use bchrpc::{GetBlockRequest, get_block_request::HashOrHeight};
-        let mut bchd = self.bchd.clone();
-        loop {
-            let block_height = current_height_atomic.fetch_add(1, Ordering::SeqCst);
-            while *watch_height_receiver.borrow() + Self::MAX_FETCH_AHEAD < block_height {
-                println!("Waiting for BCHD to catch up, fetching block {} but processed only up to {}", block_height, *watch_height_receiver.borrow());
-                watch_height_receiver.recv().await;
-            }
-            let result = bchd.get_block(GetBlockRequest {
-                full_transactions: true,
-                hash_or_height: Some(HashOrHeight::Height(block_height as i32)),
-            }).await;
-            match result {
-                Ok(block) => {
-                    if let Some(block) = &block.get_ref().block {
-                        let batches = match self.db.make_block_batches(block) {
-                            Ok(batches) => batches,
-                            Err(err) => {
-                                println!("make_block_batches (height {}): {:?}", block_height, err);
-                                return Err(err);
-                            },
-                        };
-                        let _ = send_batches.send(batches).await.map_err(|_| println!("Send failed"));
-                    }
-                }
-                Err(err) if err.message() == "block not found" => {
-                    return Ok(());
-                }
-                Err(err) => {
-                    println!("Error message ({}): {}", block_height, err.message());
-                    println!("Error detail ({}): {}", block_height, String::from_utf8_lossy(&err.details()));
-                    return Err(err.into());
-                }
-            }
-        }
-    }
-
     async fn monitor_new_blocks(&self) {
         println!("Monitoring for new blocks");
         loop {
@@ -238,29 +184,7 @@ impl Indexer {
         }
     }
 
-    async fn try_monitor_new_blocks(&self) -> Result<()> {
-        use bchrpc::block_notification::Block;
-        use bchrpc::SubscribeBlocksRequest;
-        let mut bchd = self.bchd.clone();
-        let mut block_stream = bchd
-            .subscribe_blocks(SubscribeBlocksRequest {
-                full_block: true,
-                full_transactions: true,
-                serialize_block: false,
-            })
-            .await?;
-        while let Some(notification) = block_stream.get_mut().message().await? {
-            if let Some(Block::MarshaledBlock(block)) = notification.block {
-                println!("New block: {}", to_le_hex(&block.info.as_ref().unwrap().hash));
-                let batches = self.db.make_block_batches(&block)?;
-                self.db.apply_block_batches(batches)?;
-                self.update_mempool().await?;
-            }
-        }
-        Ok(())
-    }
-
-    pub async fn monitor_mempool(&self) {
+    async fn monitor_mempool(&self) {
         loop {
             match self.try_monitor_mempool().await {
                 Ok(()) => println!("Block stream ended, restarting."),
@@ -314,5 +238,95 @@ impl Indexer {
         self.db.apply_batch(batch)?;
         println!("Added {} txs to the mempool", txs.len());
         Ok(())
+    }
+
+    async fn try_monitor_new_blocks(&self) -> Result<()> {
+        use bchrpc::block_notification::Block;
+        use bchrpc::SubscribeBlocksRequest;
+        let mut bchd = self.bchd.clone();
+        let mut block_stream = bchd
+            .subscribe_blocks(SubscribeBlocksRequest {
+                full_block: true,
+                full_transactions: true,
+                serialize_block: false,
+            })
+            .await?;
+        while let Some(notification) = block_stream.get_mut().message().await? {
+            if let Some(Block::MarshaledBlock(block)) = notification.block {
+                println!("New block: {}", to_le_hex(&block.info.as_ref().unwrap().hash));
+                let batches = self.db.make_block_batches(&block)?;
+                self.db.apply_block_batches(batches)?;
+                self.update_mempool().await?;
+            }
+        }
+        Ok(())
+    }
+}
+
+#[async_trait]
+impl Indexer for IndexerProduction {
+    fn db(&self) -> &IndexDb {
+        &self.db
+    }
+
+    async fn block_txs(&self, block_hash: &[u8]) -> Result<Vec<([u8; 32], TxMeta)>> {
+        use bchrpc::{GetBlockRequest, get_block_request::HashOrHeight, block::transaction_data::TxidsOrTxs};
+        let mut bchd = self.bchd.clone();
+        let block = bchd.get_block(GetBlockRequest {
+            full_transactions: false,
+            hash_or_height: Some(HashOrHeight::Hash(block_hash.to_vec()))
+        }).await?;
+        let block = block.get_ref().block.as_ref().ok_or_else(|| anyhow!("Block not found"))?;
+        let txs = block.transaction_data.iter().map(|tx_data| -> Result<_> {
+            match &tx_data.txids_or_txs {
+                Some(TxidsOrTxs::TransactionHash(tx_hash)) => {
+                    let tx_hash: [u8; 32] = tx_hash.as_slice().try_into()?;
+                    let tx_meta = self.db().tx_meta(&tx_hash)?.ok_or_else(|| anyhow!("Unindexed txs"))?;
+                    Ok((tx_hash, tx_meta))
+                }
+                _ => bail!("Invalid tx hash"),
+            }
+        }).collect::<Result<Vec<_>, _>>()?;
+        Ok(txs)
+    }
+
+    async fn tx(&self, tx_hash: &[u8]) -> Result<Tx> {
+        use bchrpc::{GetTransactionRequest, GetRawTransactionRequest};
+        let mut bchd1 = self.bchd.clone();
+        let mut bchd2 = self.bchd.clone();
+        let (tx, raw_tx) = tokio::try_join!(
+            bchd1.get_transaction(GetTransactionRequest {
+                hash: tx_hash.to_vec(),
+                include_token_metadata: false,
+            }),
+            bchd2.get_raw_transaction(GetRawTransactionRequest {
+                hash: tx_hash.to_vec(),
+            }),
+        )?;
+        let tx = tx.get_ref();
+        let tx = tx.transaction.as_ref().ok_or_else(|| anyhow!("No tx found"))?;
+        let raw_tx = raw_tx.get_ref();
+        let tx_meta = self.db.tx_meta(tx_hash)?.ok_or_else(|| anyhow!("No tx meta for tx"))?;
+        let tx_out_spends = self.db.tx_out_spends(tx_hash)?;
+        let token_meta = match tx.slp_transaction_info.as_ref() {
+            Some(slp_info) if !slp_info.token_id.is_empty() => {
+                self.db.token_meta(&slp_info.token_id)?
+            }
+            _ => None,
+        };
+        Ok(Tx {
+            transaction: tx.clone(),
+            tx_meta,
+            token_meta,
+            raw_tx: raw_tx.transaction.clone(),
+            tx_out_spends,
+        })
+    }
+
+    async fn run_indexer(self: Arc<Self>) {
+        match self.run_indexer_inner().await {
+            Ok(()) => {},
+            Err(err) => eprintln!("Index error: {}", err),
+        }
     }
 }

@@ -4,7 +4,7 @@ use maud::html;
 use warp::{Reply, http::Uri};
 use serde::Serialize;
 use chrono::{Utc, TimeZone};
-use std::{borrow::Cow, collections::{BTreeSet, HashMap, hash_map::Entry}, convert::{TryInto, TryFrom}, sync::Arc};
+use std::{borrow::Cow, collections::{HashMap, hash_map::Entry}, convert::{TryInto, TryFrom}, sync::Arc};
 use zerocopy::byteorder::{I32, U32};
 use askama::Template;
 
@@ -39,57 +39,11 @@ impl Server {
         Ok(warp::reply::html(homepage.render().unwrap()))
     }
 
-    fn generate_pagination(&self, page: usize, last_page: usize, curated_page_offsets: &[usize]) -> BTreeSet<usize> {
-        let mut pages = BTreeSet::new();
-
-        pages.insert(0);
-        pages.insert(page);
-        pages.insert(last_page);
-
-        for &page_offset in curated_page_offsets.iter().rev() {
-            let preceding_page = page.saturating_sub(page_offset) / page_offset * page_offset;
-            if preceding_page > 0 {
-                pages.insert(preceding_page);
-            }
-        }
-
-        for &page_offset in curated_page_offsets.iter() {
-            let following_page = page.saturating_add(page_offset) / page_offset * page_offset;
-            if following_page >= last_page {
-                pages.insert(last_page);
-                break;
-            }
-            pages.insert(following_page);
-        }
-
-        pages
-    }
-
-    pub async fn blocks(&self, query: HashMap<String, String>) -> Result<impl Reply> {
-        let half_page_size = 500;
-        let page_size = half_page_size * 2;
-        let best_height = self.indexer.db().last_block_height()?;
-        let page = query.get("page").and_then(|page| page.parse().ok()).unwrap_or(0u32);
-        let half_page = page * 2;
-        let best_page_height = (best_height / half_page_size) * half_page_size;
-        let first_page_begin = best_page_height.saturating_sub(half_page * half_page_size);
-        let first_page_end = (first_page_begin + half_page_size - 1).min(best_height);
-        let second_page_begin = first_page_begin.saturating_sub(half_page_size);
-        let second_page_end = first_page_begin.saturating_sub(1);
-        let last_page = best_height / page_size;
-        let curated_page_offsets = &[
-            1, 2, 3, 10, 20, 50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000,
-        ];
-        let pages = self.generate_pagination(page as usize, last_page as usize, curated_page_offsets);
+    pub async fn blocks(&self) -> Result<impl Reply> {
+        let last_block_height = self.indexer.db().last_block_height()?;
 
         let blocks_template = BlocksTemplate {
-            query_string: "?page=",
-            pages: pages,
-            first_page_begin: first_page_begin,
-            first_page_end: first_page_end,
-            second_page_begin: second_page_begin,
-            second_page_end: second_page_end,
-            last_block_height: best_height,
+            last_block_height: last_block_height,
         };
         Ok(warp::reply::html(blocks_template.render().unwrap()))
     }

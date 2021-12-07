@@ -32,7 +32,7 @@
   <script type="text/javascript" src="/code/common.js"></script>
 </head>
 
-<body>
+<body class="{% block body_classes %}{% endblock %}">
   <div class="ui main menu">
     <a class="header item" href="/">
       <img class="logo" src="/assets/logo.png" />
@@ -57,7 +57,7 @@
 
   {% block content %}{% endblock %}
 
-  <div id="footer" class="ui inverted vertical footer segment">
+  <div id="footer" class="{% block footer_classes %}{% endblock %} ui inverted vertical footer segment">
     <div class="ui container">be.cash Explorer</div>
   </div>
 </body>

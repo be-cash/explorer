@@ -2,8 +2,6 @@ use chrono::{DateTime, Utc};
 use askama::Template;
 use bitcoin_cash::Address;
 
-use std::collections::BTreeSet;
-
 use crate::{blockchain::{BlockHeader, Destination}, primitives::{BlockMeta, TxMetaVariant}, indexer::Tx, server_primitives::{JsonBalance, JsonTxs}};
 
 mod filters;
@@ -15,13 +13,7 @@ pub struct HomepageTemplate {
 
 #[derive(Template)]
 #[template(path = "pages/blocks.html")]
-pub struct BlocksTemplate<'a> {
-    pub query_string: &'a str,
-    pub pages: BTreeSet<usize>,
-    pub first_page_begin: u32,
-    pub first_page_end:  u32,
-    pub second_page_begin: u32,
-    pub second_page_end: u32,
+pub struct BlocksTemplate {
     pub last_block_height: u32,
 }
 

@@ -81,18 +81,6 @@ pub fn check_is_token(slp_token: &Option<SlpToken>) -> askama::Result<bool> {
     Ok(slp_token.as_ref().map(|slp| slp.amount > 0 || slp.is_mint_baton).unwrap_or(false))
 }
 
-pub fn not_contains<'a>(set: &BTreeSet<usize>, item: &'a usize) -> askama::Result<bool> {
-    Ok(!set.contains(&item.saturating_sub(1)))
-}
-
-pub fn pagination_prev_enabled<'a>(pages: &BTreeSet<usize>, page: &'a usize) -> askama::Result<bool> {
-    Ok(page.checked_sub(2).map(|page| pages.contains(&page)).unwrap_or(false))
-}
-
-pub fn checked_sub<'a>(a: &'a usize, b: &'a usize) -> askama::Result<usize> {
-    Ok(a.saturating_sub(*b))
-}
-
 pub fn human_time<'a>(timestamp: &'a DateTime<chrono::Utc>) -> askama::Result<HumanTime> {
     Ok(HumanTime::from(*timestamp))
 }

@@ -7,6 +7,10 @@ h1, h2, h3, h4, h5 {
   padding: 0!important;
 }
 
+.overflow-y-scroll {
+  overflow-y: scroll;
+}
+
 .hidden {
   display: none;
 }
@@ -207,6 +211,10 @@ h1, h2, h3, h4, h5 {
   height: 50px;
 }
 
+#pagination {
+  margin-top: 10px;
+}
+
 .bottom-pagination {
   text-align: center;
 }
@@ -218,6 +226,11 @@ h1, h2, h3, h4, h5 {
 .ui.pagination.menu .item.disabled {
   padding-left: 0.35em;
   padding-right: 0.35em;
+}
+
+.pagination__nav-button {
+  background-color: rgba(251, 123, 129, 0.2)!important;
+  border: 1px solid white;
 }
 
 .ocean { 

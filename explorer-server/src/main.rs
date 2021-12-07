@@ -51,9 +51,8 @@ async fn main() -> Result<()> {
 
     let blocks = warp::path!("blocks")
         .and(with_server(&server))
-        .and(warp::query::<HashMap<String, String>>())
-        .and_then(|server: ServerRef, query: HashMap<String, String>| async move {
-            server.blocks(query).await.map_err(err)
+        .and_then(|server: ServerRef| async move {
+            server.blocks().await.map_err(err)
         });
 
     let block = warp::path!("block" / String)

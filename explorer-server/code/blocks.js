@@ -57,6 +57,14 @@ const getParameters = () => {
   return { page, humanPage, rows, order, start, end };
 }
 
+const updateParameters = params => {
+  const path = window.location.pathname;
+  const currentURLParams = Object.fromEntries(new URLSearchParams(window.location.search).entries());
+  const newURLParams = new URLSearchParams({ ...currentURLParams, ...params });
+
+  window.history.pushState('', document.title, `${path}?${newURLParams.toString()}`);
+}
+
 const updateLoading = (status) => {
   if (status) {
     $('.loader__container').removeClass('hidden');
@@ -97,6 +105,141 @@ const generatePaginationRequestParams = () => {
   return [ startPosition, endPosition ];
 };
 
+const determinePaginationSlots = (lastPage, paddedBlocks) => {
+  const availableWidth = $('.ui.container').width();
+
+  // pagination slot
+  const padding = 2 * 16;
+  const letter = 8;
+  const tier1 = padding + 1 * letter;
+  const tier2 = padding + 2 * letter;
+  const tier3 = padding + 3 * letter;
+  const tier4 = padding + 4 * letter;
+
+  let averageSlotWidth = 62;
+  let paddedBlockWidth;
+  if (lastPage > 0 && lastPage < 9) {
+    paddedBlockWidth = paddedBlocks * tier1;
+  } else if (lastPage > 9 && lastPage <= 99) {
+    paddedBlockWidth = paddedBlocks * tier2;
+  } else if (lastPage > 99 && lastPage <= 999) {
+    paddedBlockWidth = paddedBlocks * tier3;
+  } else if (lastPage > 999 && lastPage <= 9999) {
+    paddedBlockWidth = paddedBlocks * tier4;
+  }
+
+  const knownAverageSlotWidth = (tier1 + paddedBlockWidth + tier4) / paddedBlocks + 2;
+  averageSlotWidth = (averageSlotWidth + knownAverageSlotWidth) / 2;
+
+  return Math.floor((availableWidth) / averageSlotWidth);
+};
+
+const findClosest = (haystack, needle) => (
+  haystack.reduce((a, b) => (
+    Math.abs(b - needle) < Math.abs(a - needle) ? b : a
+  ))
+);
+
+const generatePaginationArray = (max, slots) => {
+  const validSteps = [1, 5, 10, 100, 200, 300]; // usable increments
+  const stepValues = validSteps.map(step => Math.ceil(max / step)); // realm of possibilities
+
+  // find closest
+  let bestValueIndex = stepValues.indexOf(findClosest(stepValues, slots));
+  if (stepValues[bestValueIndex] === 1) { bestValueIndex-- } // go to prev increment
+
+  const bestStep = validSteps[bestValueIndex]
+  const bestValue = stepValues[bestValueIndex]
+  const pageArray = [bestStep];
+
+  // generate page array
+  for (i = 0; i < bestValue - 1; i++) {
+    pageArray.push(pageArray.slice(-1)[0] + bestStep);
+  }
+
+  // if spilling over: shift everything to the right
+  if (pageArray.slice(-1)[0] > max) {
+    pageArray.pop()
+    pageArray.unshift(pageArray[0] - validSteps[bestValueIndex - 1]);
+  }
+
+  // recursive case: under (there are slots left)
+  if (bestValue < slots) {
+    return generatePaginationArray(pageArray[0], slots - bestValue + 1).concat(pageArray.slice(1));
+  }
+
+  // normal case: over (criss cross edges until equal)
+  if (bestValue > slots) {
+    for (i = 0; i < bestValue - slots; i++) {
+      if (i % 2) { pageArray.pop() } else { pageArray.shift() }
+    }
+  }
+
+  // normal case: equal (do nothing)
+  return pageArray;
+};
+
+const generatePaginationUIParams = () => {
+  const { humanPage: currentPage, rows } = getParameters();
+  const blockHeight = getBlockHeight();
+  const lastPage = Math.ceil(blockHeight / rows);
+
+  const reservedSlots = 2; // reserve for first and last
+  const slots = determinePaginationSlots(lastPage, 6) - reservedSlots;
+
+  const pageArray = generatePaginationArray(lastPage, slots)
+  pageArray.unshift(1)
+  pageArray.push(lastPage)
+
+  // if currentPage not in the array replace the closest
+  const closestPage = findClosest(pageArray, currentPage);
+  if (closestPage !== currentPage) {
+    const closestPageIndex = pageArray.indexOf(findClosest(pageArray, currentPage));
+    pageArray[closestPageIndex] = currentPage;
+  }
+
+  return { currentPage, pageArray };
+};
+
+const generatePaginationUI = (currentPage, pageArray) => {
+  const path = window.location.pathname;
+
+  // DOM building blocks
+  const activeItem = (number) => `<a class="item active" href="${path}?page=${number}" onclick="goToPage(event, ${number})">${number}</a>`;
+  const item = (number) => `<a class="item" href="${path}?page=${number}" onclick="goToPage(event, ${number})">${number}</a>`;
+  const iconItem = (number, icon) => `<a class="item pagination__nav-button" href="${path}?page=${number}" onclick="goToPage(event, ${number})">${icon}</a>`;
+
+  const prev = iconItem(currentPage - 1, '<i class="icon angle left"></i>')
+  const next = iconItem(currentPage + 1, '<i class="icon angle right"></i>')
+
+  let pagination = '';
+  pagination += '<div class="ui pagination menu">';
+
+  pageArray.forEach((pageNumber, i) => {
+    if (i === 0) { pagination += prev }
+
+    if (pageNumber === currentPage) {
+      pagination += activeItem(pageNumber)
+      return;
+    }
+
+    pagination += item(pageNumber);
+
+    if (i === pageArray.length - 1) { pagination += next }
+  });
+
+  pagination += '</div>';
+
+  $('#pagination').html(pagination);
+};
+
+// UI actions
+const goToPage = (event, page) => {
+  event.preventDefault();
+  reRenderPage({ page });
+};
+
+
 // UI presentation elements
 
 const dataTable = () => {
@@ -133,11 +276,34 @@ const dataTable = () => {
 }
 
 
+// events
+$(window).resize(() => {
+  const { currentPage, pageArray } = generatePaginationUIParams();
+  generatePaginationUI(currentPage, pageArray);
+});
+
+
+// Basically a fake refresh, dynamically updates everything
+// according to new params
+// updates: URL, table and pagination
+const reRenderPage = params => {
+  if (params) {
+    updateParameters(params)
+  }
+
+  const [ startPosition, endPosition ] = generatePaginationRequestParams();
+  updateTable(startPosition, endPosition);
+
+  const { currentPage, pageArray } = generatePaginationUIParams();
+  generatePaginationUI(currentPage, pageArray);
+};
+
+
 // main
 webix.ready(() => {
   // init all UI elements
   dataTable();
 
-  const [ startPosition, endPosition ] = generatePaginationRequestParams();
-  updateTable(startPosition, endPosition);
+  // global state update
+  reRenderPage();
 });

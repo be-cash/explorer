@@ -29,6 +29,7 @@ byteorder = "1.4"
 tokio-rustls = { version = "*", features = ["dangerous_configuration"] }
 webpki = "*"
 toml = "0.5.8"
+async-trait = "0.1.51"
 
 [build-dependencies]
 tonic-build = "0.3"

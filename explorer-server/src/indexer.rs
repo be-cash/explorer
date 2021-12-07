@@ -1,14 +1,40 @@
-use std::{collections::HashMap, convert::TryInto, sync::{Arc, atomic::{AtomicUsize, Ordering}}, time::Instant};
+use std::{collections::HashMap, convert::TryInto, sync::{Arc, atomic::{AtomicUsize}}, time::Instant};
 
 use anyhow::{Result, anyhow, bail};
 use tonic::transport::{Certificate, Channel, ClientTlsConfig, Endpoint};
 use tokio::sync::{mpsc, watch};
 use crate::{blockchain::to_le_hex, grpc::bchrpc, indexdb::{BlockBatches, IndexDb, TxOutSpend}, primitives::{TokenMeta, TxMeta}};
 use crate::grpc::bchrpc::bchrpc_client::BchrpcClient;
+use async_trait::async_trait;
 
-pub struct Indexer {
+
+const ALPN_H2: &'static str = "h2";
+
+#[async_trait]
+pub trait Indexer: Sync + Send {
+    async fn connect(db: IndexDb) -> Result<Self> where Self: Sized;
+    fn db(&self) -> &IndexDb;
+    async fn block_txs(&self, block_hash: &[u8]) -> Result<Vec<([u8; 32], TxMeta)>>;
+    async fn tx(&self, tx_hash: &[u8]) -> Result<Tx>;
+    async fn run_indexer(self: Arc<Self>);
+    async fn run_indexer_inner(self: Arc<Self>) -> Result<()>;
+    async fn index_thread(
+        &self,
+        current_height_atomic: Arc<AtomicUsize>,
+        mut send_batches: mpsc::Sender<BlockBatches>,
+        mut watch_height_receiver: watch::Receiver<usize>,
+    ) -> Result<()>;
+    async fn monitor_new_blocks(&self);
+    async fn try_monitor_new_blocks(&self) -> Result<()>;
+    async fn monitor_mempool(&self);
+    async fn try_monitor_mempool(&self) -> Result<()>;
+    async fn update_mempool(&self) -> Result<()>;
+}
+
+pub struct IndexerProduction {
     db: IndexDb,
     bchd: BchrpcClient<Channel>,
+    max_fetch_ahead: usize,
 }
 
 pub struct Tx {
@@ -33,18 +59,17 @@ impl tokio_rustls::rustls::ServerCertVerifier for NopCertVerifier {
     }
 }
 
-impl Indexer {
-    const ALPN_H2: &'static str = "h2";
-    const MAX_FETCH_AHEAD: usize = 1000;
-
-    pub async fn connect(db: IndexDb) -> Result<Self> {
+#[async_trait]
+impl Indexer for IndexerProduction {
+    async fn connect(db: IndexDb) -> Result<Self> {
+        const MAX_FETCH_AHEAD: usize = 1000;
         use std::fs;
         use std::io::Read;
         let mut cert_file = fs::File::open("cert.crt")?;
         let mut cert = Vec::new();
         cert_file.read_to_end(&mut cert)?;
         let mut config =  tokio_rustls::rustls::ClientConfig::new();
-        config.set_protocols(&[Vec::from(&Self::ALPN_H2[..])]);
+        config.set_protocols(&[Vec::from(&ALPN_H2[..])]);
         let mut dangerous_config =  tokio_rustls::rustls::DangerousClientConfig {
             cfg: &mut config,
         };
@@ -54,14 +79,14 @@ impl Indexer {
             .rustls_client_config(config);
         let endpoint = Endpoint::from_static("https://api2.be.cash:8445").tls_config(tls_config)?;
         let bchd = BchrpcClient::connect(endpoint).await?;
-        Ok(Indexer { bchd, db })
+        Ok(IndexerProduction { bchd, db, max_fetch_ahead: MAX_FETCH_AHEAD })
     }
 
-    pub fn db(&self) -> &IndexDb {
+    fn db(&self) -> &IndexDb {
         &self.db
     }
 
-    pub async fn block_txs(&self, block_hash: &[u8]) -> Result<Vec<([u8; 32], TxMeta)>> {
+    async fn block_txs(&self, block_hash: &[u8]) -> Result<Vec<([u8; 32], TxMeta)>> {
         use bchrpc::{GetBlockRequest, get_block_request::HashOrHeight, block::transaction_data::TxidsOrTxs};
         let mut bchd = self.bchd.clone();
         let block = bchd.get_block(GetBlockRequest {
@@ -82,7 +107,7 @@ impl Indexer {
         Ok(txs)
     }
 
-    pub async fn tx(&self, tx_hash: &[u8]) -> Result<Tx> {
+    async fn tx(&self, tx_hash: &[u8]) -> Result<Tx> {
         use bchrpc::{GetTransactionRequest, GetRawTransactionRequest};
         let mut bchd1 = self.bchd.clone();
         let mut bchd2 = self.bchd.clone();
@@ -115,7 +140,7 @@ impl Indexer {
         })
     }
 
-    pub async fn run_indexer(self: Arc<Self>) {
+    async fn run_indexer(self: Arc<Self>) {
         match self.run_indexer_inner().await {
             Ok(()) => {},
             Err(err) => eprintln!("Index error: {}", err),
@@ -192,7 +217,7 @@ impl Indexer {
         let mut bchd = self.bchd.clone();
         loop {
             let block_height = current_height_atomic.fetch_add(1, Ordering::SeqCst);
-            while *watch_height_receiver.borrow() + Self::MAX_FETCH_AHEAD < block_height {
+            while *watch_height_receiver.borrow() + self.max_fetch_ahead < block_height {
                 println!("Waiting for BCHD to catch up, fetching block {} but processed only up to {}", block_height, *watch_height_receiver.borrow());
                 watch_height_receiver.recv().await;
             }
@@ -260,7 +285,7 @@ impl Indexer {
         Ok(())
     }
 
-    pub async fn monitor_mempool(&self) {
+    async fn monitor_mempool(&self) {
         loop {
             match self.try_monitor_mempool().await {
                 Ok(()) => println!("Block stream ended, restarting."),

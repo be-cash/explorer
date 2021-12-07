@@ -16,6 +16,7 @@ mod indexdb;
 mod indexer;
 mod primitives;
 mod config;
+mod mocker;
 
 type ServerRef = Arc<Server>;
 

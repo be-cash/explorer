@@ -3,7 +3,7 @@ use std::fs;
 
 use anyhow::{Result, Context};
 use indexdb::IndexDb;
-use indexer::{Indexer, IndexerProduction};
+use indexer::{Indexer, IndexerProduction, IndexerDevelopment};
 use server::Server;
 use warp::{Filter, Rejection, Reply, hyper::StatusCode};
 use serde::{Serialize};
@@ -39,7 +39,11 @@ async fn main() -> Result<()> {
     //let db = Db::open("../db.sled")?;
     let indexdb = IndexDb::open(&config.index_database)?;
 
-    let indexer_instance: Box<Arc<dyn Indexer>> = Box::new(Arc::new(IndexerProduction::connect(indexdb).await?));
+    let indexer_instance: Box<Arc<dyn Indexer>> = if config.mode == config::Modes::Production {
+        Box::new(Arc::new(IndexerProduction::connect(indexdb).await?))
+    } else {
+        Box::new(Arc::new(IndexerDevelopment::connect(indexdb).await?))
+    };
 
     tokio::spawn({
         let indexer_clone = Arc::clone(&indexer_instance);

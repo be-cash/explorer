@@ -30,6 +30,7 @@ tokio-rustls = { version = "*", features = ["dangerous_configuration"] }
 webpki = "*"
 toml = "0.5.8"
 async-trait = "0.1.51"
+ctrlc = "3.2.1"
 rand = "0.8.4"
 sha2 = "0.9.8"
 

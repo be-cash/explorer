@@ -246,6 +246,11 @@ const goToPage = (event, page) => {
   reRenderPage({ page });
 };
 
+const scrollToBottom = () => {
+  const pageHeight = $(document).height()-$(window).height();
+  $("html, body").animate({ scrollTop: pageHeight - 50 }, 250);
+};
+
 
 // UI presentation elements
 

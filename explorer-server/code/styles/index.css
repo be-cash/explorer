@@ -450,6 +450,13 @@ table.dataTable.no-footer {
     -webkit-box-shadow: 2px 2px 15px 8px #000000;
 }
 
+.block-listing__fixed-nav-icon {
+  position: fixed;
+  right: 10px;
+  bottom: 25px;
+  z-index: 100;
+}
+
 .datatable__block_listing
 .webix_dtable,
 .webix_view {

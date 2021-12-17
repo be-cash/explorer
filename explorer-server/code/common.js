@@ -200,13 +200,22 @@ const scrollToBottom = () => {
     return Math.round((availableWidth) / predictedTier);
   };
 
-  pagination.generatePaginationRequestParams = () => {
+  pagination.generatePaginationRequestRange = () => {
     const { page, rows, start, end } = window.state.getParameters();
 
     const startPosition = end - (page * rows);
     const endPosition = Math.max(startPosition - rows, start);
 
     return [ startPosition, endPosition ];
+  };
+
+  pagination.generatePaginationRequestOffset = () => {
+    const { humanPage, rows } = window.state.getParameters();
+
+    const offset = (humanPage * rows) - rows;
+    const take = rows;
+
+    return { offset, take };
   };
 
   const generatePaginationArray = (currentPage, max, slots) => {

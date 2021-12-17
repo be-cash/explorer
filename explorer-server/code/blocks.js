@@ -159,7 +159,7 @@ const reRenderPage = params => {
     window.state.updateParameters(params)
   }
 
-  const [ startPosition, endPosition ] = window.pagination.generatePaginationRequestParams();
+  const [ startPosition, endPosition ] = window.pagination.generatePaginationRequestRange();
   updateTable(startPosition, endPosition);
 
   const { currentPage, pageArray } = window.pagination.generatePaginationUIParams();

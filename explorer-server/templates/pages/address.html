@@ -1,29 +1,8 @@
 {% extends "base.html" %}
 
+{% block footer_classes %}hidden{% endblock %}
+
 {% block content %}
-  <script type="text/javascript">
-    window.addrTxData = [];
-    window.addrBalances = [];
-
-    var txs = JSON.parse('{{ encoded_txs|safe }}');
-    var tokens = JSON.parse('{{ encoded_tokens|safe }}');
-    var startIdx = window.addrTxData.length;
-    window.addrTxData.length += txs.length;
-    for (var i = 0; i < txs.length; ++i) {
-        var tx = txs[i];
-        tx.token = tx.tokenIdx === null ? null : tokens[tx.tokenIdx];
-        tx.timestamp *= 1000;
-        window.addrTxData[startIdx + i] = tx;
-    }
-    var balances = JSON.parse('{{ encoded_balances|safe }}');
-    window.addrBalances.length = balances.length;
-    for (var i = 0; i < balances.length; ++i) {
-        var balance = balances[i];
-        balance.token = balance.tokenIdx === null ? null : tokens[balance.tokenIdx];
-        window.addrBalances[i] = balance;
-    }
-  </script>
-
   <div class="ui container">
     <table id="coins" class="ui table">
       {% for balance in json_balances %}
@@ -132,16 +111,66 @@
                 <div id="sats-coins" style="display: none;">
                   <div id="sats-coins-table"></div>
                 </div>
-
-                <script type="text/javascript" src="/code/coins.js?hash=80d7734"></script>
               </td>
             </tr>
         {% endmatch %}
       {% endfor %}
     </table>
 
-    <div id="addr-txs">
-      <div id="txs-table"></div>
+    <table id="address-txs-table" class="block-listing__datatable dataTable compact responsive nowrap no-footer" style="width: 100%">
+      <thead>
+          <tr>
+              <th>Age</th>
+              <th>Date</th>
+              <th>ID</th>
+              <th>Block Height</th>
+              <th>Size</th>
+              <th>Fee [sats]</th>
+              <th>Inputs</th>
+              <th>Outputs</th>
+              <th>Amount XEC</th>
+              <th>Amount Token</th>
+              <th></th>
+          </tr>
+      </thead>
+      <tbody class="blur">
+      </tbody>
+    </table>
+
+    <div class="ui container">
+      <div id="pagination" class="bottom-pagination" data-total-entries="{{ address_num_txs }}">
+      </div>
+      <div class="block-listing__fixed-nav-icon">
+        <button class="circular ui icon button" onclick="scrollToBottom()">
+          <i class="angle down icon"></i>
+        </button>
+      </div>
     </div>
   </div>
+  </div>
+
+  <script type="text/javascript">
+    window.addrTxData = [];
+    window.addrBalances = [];
+
+    var txs = JSON.parse('{{ encoded_txs|safe }}');
+    var tokens = JSON.parse('{{ encoded_tokens|safe }}');
+    var startIdx = window.addrTxData.length;
+    window.addrTxData.length += txs.length;
+    for (var i = 0; i < txs.length; ++i) {
+        var tx = txs[i];
+        tx.token = tx.tokenIdx === null ? null : tokens[tx.tokenIdx];
+        tx.timestamp *= 1000;
+        window.addrTxData[startIdx + i] = tx;
+    }
+    var balances = JSON.parse('{{ encoded_balances|safe }}');
+    window.addrBalances.length = balances.length;
+    for (var i = 0; i < balances.length; ++i) {
+        var balance = balances[i];
+        balance.token = balance.tokenIdx === null ? null : tokens[balance.tokenIdx];
+        window.addrBalances[i] = balance;
+    }
+  </script>
+  <script type="text/javascript" src="/code/address.js?hash=80d7734"></script>
+
 {% endblock %}

@@ -47,7 +47,9 @@ impl Server {
         };
         Ok(warp::reply::html(blocks_template.render().unwrap()))
     }
+}
 
+impl Server {
     pub async fn data_blocks(&self, start_height: u32, end_height: u32) -> Result<impl Reply> {
         let num_blocks = end_height.checked_sub(start_height).unwrap() + 1;
         let blocks = self.indexer.db().block_range(start_height, num_blocks)?;
@@ -67,7 +69,7 @@ impl Server {
         }
         #[derive(Serialize)]
         #[serde(rename_all = "camelCase")]
-        struct BlockJsonResponse {
+        struct JsonResponse {
             data: Vec<Block>,
         }
 
@@ -85,13 +87,17 @@ impl Server {
             });
         }
 
-        let json_response = BlockJsonResponse { data: json_blocks };
+        let json_response = JsonResponse { data: json_blocks };
         Ok(serde_json::to_string(&json_response)?)
     }
-}
 
-impl Server {
     pub async fn data_block_txs(&self, block_hash: &str) -> Result<impl Reply> {
+        #[derive(Serialize)]
+        #[serde(rename_all = "camelCase")]
+        struct JsonResponse {
+            data: Vec<JsonTx>,
+        }
+
         let block_hash = from_le_hex(block_hash)?;
         let block_txs = self.indexer.block_txs(&block_hash).await?;
         let json_txs = self.json_txs(
@@ -113,16 +119,49 @@ impl Server {
             txs.push(tx);
         }
 
-        #[derive(Serialize)]
-        #[serde(rename_all = "camelCase")]
-        struct BlockTxsJsonResponse {
-            data: Vec<JsonTx>,
-        }
-
-        let json_response = BlockTxsJsonResponse { data: txs };
+        let json_response = JsonResponse { data: txs };
         Ok(serde_json::to_string(&json_response)?)
     }
 
+    pub async fn data_address_txs(&self, address: &str, query: HashMap<String, String>) -> Result<impl Reply> {
+        #[derive(Serialize)]
+        #[serde(rename_all = "camelCase")]
+        struct JsonResponse {
+            data: Vec<JsonTx>,
+        }
+
+        let offset: usize = query.get("offset").map(|s| s.as_str()).unwrap_or("0").parse()?;
+        let take: usize = query.get("take").map(|s| s.as_str()).unwrap_or("100").parse()?;
+
+        let address = Address::from_cash_addr(address)?;
+        let sats_address = address.with_prefix(self.satoshi_addr_prefix);
+        let address_txs = self.indexer.db().address(&sats_address, offset, take)?;
+        let mut json_txs = self.json_txs(
+            address_txs
+                .iter()
+                .map(|(tx_hash, addr_tx, tx_meta)| {
+                    (tx_hash.as_ref(), addr_tx.timestamp, Some(addr_tx.block_height), tx_meta, (addr_tx.delta_sats, addr_tx.delta_tokens))
+                })
+        ).await?;
+        let balance = self.indexer.db().address_balance(&sats_address, offset, take)?;
+        let AddressBalance { utxos, .. } = balance;
+        for (token_id, _) in &utxos {
+            if let Some(token_id) = &token_id {
+                if !json_txs.token_indices.contains_key(token_id.as_ref()) {
+                    if let Some(token_meta) = self.indexer.db().token_meta(token_id)? {
+                        json_txs.token_indices.insert(token_id.to_vec(), json_txs.tokens.len());
+                        json_txs.tokens.push(JsonToken::from_token_meta(token_id, token_meta));
+                    }
+                }
+            }
+        }
+
+        let json_response = JsonResponse { data: json_txs.txs };
+        Ok(serde_json::to_string(&json_response)?)
+    }
+}
+
+impl Server {
     async fn json_txs(&self, txs: impl ExactSizeIterator<Item=(&[u8], i64, Option<i32>, &TxMeta, (i64, i64))>) -> Result<JsonTxs> {
         let mut json_txs = Vec::with_capacity(txs.len());
         let mut token_indices = HashMap::<Vec<u8>, usize>::new();

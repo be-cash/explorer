@@ -436,17 +436,20 @@ table.dataTable.no-footer {
 }
 
 #blocks-table_length,
+#address-txs-table_length,
 #txs-table_length {
   margin-bottom: 10px;
   float: right;
 }
 
 #blocks-table_paginate,
+#address-txs-table_paginate,
 #txs-table_paginate {
   display: none;
 }
 
 #blocks-table_info,
+#address-txs-table_info,
 #txs-table_info {
   display: none;
 }

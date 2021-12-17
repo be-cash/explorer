@@ -74,6 +74,7 @@ h1, h2, h3, h4, h5 {
 .hex {
   font-family: 'Ubuntu Mono';
   word-break: break-all;
+  text-align: left;
 }
 
 #txs-table .webix_view,
@@ -305,15 +306,15 @@ h1, h2, h3, h4, h5 {
   justify-content: space-between;
 }
 
-table.tx-hash-table td:nth-child(2) {
+table.top-section__hash-table td:nth-child(2) {
   text-align: right!important;
 }
 
-table.tx-hash-table tr:first-child td {
+table.top-section__hash-table tr:first-child td {
   padding-top: 0!important;
 }
 
-table.tx-hash-table tr:last-child td {
+table.top-section__hash-table tr:last-child td {
   padding-bottom: 0!important;
 }
 
@@ -485,6 +486,15 @@ table.dataTable.no-footer {
 
 .block__tx-header {
   margin-bottom: -29px!important;
+}
+
+.block__advanced-data {
+  margin-top: 14px;
+}
+
+.block__detail-table {
+  width: 100%!important;
+  padding: 0 6px 0 6px;
 }
 
 .loader__container {

@@ -10,72 +10,101 @@
     <h1>Block #{{ block_meta.height }}</h1>
 
     <div class="ui segment">
-      <strong>Hash: </strong>
-      <span id="block-hash" class="hex">{{ block_hash_string }}</span>
+      <table class="top-section__hash-table ui very basic table">
+        <tbody>
+          <tr>
+            <td class="no-padding"><strong>Hash</strong></td>
+            <td class="no-padding"><span id="block-hash" class="hex">{{ block_hash_string }}</span></td>
+          </tr>
+        </tbody>
+      </table>
     </div>
 
-    <div class="ui grid">
-      <div class="six wide column">
-        <table class="ui table">
-          <tbody>
-            <tr>
-              <td>Age</td>
-              <td>{{ timestamp|human_time }}</td>
-            </tr>
+    <div class="ui three column grid">
+      <div class="column">
+        <div class="ui segment">
+          <table class="ui very basic collapsing celled table block__detail-table">
+            <tbody>
+              <tr>
+                <td>Age</td>
+                <td>{{ timestamp|human_time }}</td>
+              </tr>
 
-            <tr>
-              <td>Mined on</td>
-              <td class="moment__timestamp" data-timestamp="{{ block_meta.timestamp }}"></td>
-            </tr>
+              <tr>
+                <td>Unix Timestamp</td>
+                <td>{{ block_meta.timestamp|i64_to_u64|render_integer|safe }}</td>
+              </tr>
 
-            <tr>
-              <td>Unix Timestamp</td>
-              <td>{{ block_meta.timestamp|i64_to_u64|render_integer|safe }}</td>
-            </tr>
-
-            <tr>
-              <td>Mined by</td>
-              <td>Unknown</td>
-            </tr>
-
-            <tr>
-              <td>Confirmations</td>
-              <td>{{ confirmations }}</td>
-            </tr>
-
-            <tr>
-              <td>Size</td>
-              <td>{{ block_meta.size|render_human_size }} ({{ block_meta.size|render_integer_smallify|safe }} B)</td>
-            </tr>
-
-            <tr>
-              <td>Transactions</td>
-              <td>{{ block_meta.num_txs }}</td>
-            </tr>
-          </tbody>
-        </table>
+              <tr>
+                <td>Confirmations</td>
+                <td>{{ confirmations }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
 
-      <div class="ten wide column">
-        <table class="ui table">
-          <tbody>
-            <tr>
-              <td>Difficulty</td>
-              <td>{{ block_meta.difficulty|render_difficulty|safe }}</td>
-            </tr>
+      <div class="column">
+        <div class="ui segment">
+          <table class="ui very basic collapsing celled table block__detail-table">
+            <tbody>
+              <tr>
+                <td>Mined on</td>
+                <td class="moment__timestamp" data-timestamp="{{ block_meta.timestamp }}"></td>
+              </tr>
 
+              <tr>
+                <td>Mined by</td>
+                <td>Unknown</td>
+              </tr>
+
+              <tr>
+                <td>Difficulty</td>
+                <td>{{ block_meta.difficulty|render_difficulty|safe }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="column">
+        <div class="ui segment">
+          <table class="ui very basic collapsing celled table block__detail-table">
+            <tbody>
+              <tr>
+                <td>Size</td>
+                <td>{{ block_meta.size|render_human_size }} ({{ block_meta.size|render_integer_smallify|safe }} B)</td>
+              </tr>
+
+              <tr>
+                <td>Transactions</td>
+                <td>{{ block_meta.num_txs }}</td>
+              </tr>
+
+              <tr>
+                <td>Nonce</td>
+                <td>{{ block_meta.nonce }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div id="advanced-block-data" class="ui styled fluid accordion block__advanced-data">
+      <div class="title">
+        <i class="dropdown icon"></i>
+        <span class="non-selectable">Advanced block data</span>
+      </div>
+      <div class="content">
+        <table class="ui very basic collapsing celled table">
+          <tbody>
             <tr>
               <td>Header</td>
               <td>
                 <div class="hex">{{ block_header|hexify_block_header }}</div>
               </td>
             </tr>
-
-            <tr>
-              <td>Nonce</td>
-              <td>{{ block_meta.nonce }}</td>
-            </tr>
-
             <tr>
               <td>Coinbase data</td>
               <td>{{ block_meta.coinbase_data|string_from_lossy_utf8 }}</td>
@@ -91,6 +120,7 @@
         </table>
       </div>
     </div>
+
 
     <h2 class="ui header block__tx-header">Transactions</h2>
     {% call loader::render() %}
@@ -123,4 +153,8 @@
 
   <script type="text/javascript" src="/code/txs.js?hash=80d7734"></script>
   <script type="text/javascript" src="/code/timestamps.js?hash=80d7734"></script>
+
+  <script type="text/javascript">
+    $('.ui.accordion').accordion();
+  </script>
 {% endblock %}

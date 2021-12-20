@@ -3,13 +3,17 @@ h1, h2, h3, h4, h5 {
   color: #161c33;
 }
 
-.homepage {
+.hidden {
+  display: none;
+}
+
+.homepage__welcome  {
   min-height: calc(100% - 50px - 56px - 1rem - 50px);
   padding-top: 48px;
   box-sizing: border-box;
 }
 
-.ludwig {
+.homepage__ludwig-image {
   position: absolute;
   height: 50vh;
   top: 14.6%;
@@ -17,12 +21,11 @@ h1, h2, h3, h4, h5 {
   right: 0;
   margin: 0 auto;
   border-radius: 22vh;
-  /* border: 2px solid black; */
   z-index: 999;
   pointer-events: none;
 }
 
-.circle {
+.homepage__ludwig-circle {
   position: absolute;
   height: 50vh;
   width: 50vh;

@@ -39,7 +39,7 @@ impl Server {
             body {
                 (self.toolbar())
 
-                .ui.container.homepage {
+                .ui.container.homepage__welcome {
                     h1 {
                         "Welcome to the be.cash Block Explorer"
                     }
@@ -48,9 +48,9 @@ impl Server {
                     }
                 }
 
-                div {
-                    .circle {}
-                    img.ludwig src="/assets/ludwig.png" {}
+                .homepage__ludwig {
+                    .homepage__ludwig-circle {}
+                    img.homepage__ludwig-image src="/assets/ludwig.png" {}
                 }
 
                 .ocean {

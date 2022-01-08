@@ -13,21 +13,31 @@ const renderInt = (number) => {
   str += '<span>' + parts[parts.length - 1] + '</span>';
   return str;
 }
-const renderAge = (row) => moment(row.timestamp * 1000).fromNow();
-const renderTemplate = (row) => '<a href="/block-height/' + row.height + '">' + renderInt(row.height) + '</a>';
-const renderHash = (row) => `<a href="/block/${row.hash}">${minifyHash(row.hash)}</a>`;
-const renderNumtTxs = (row) => renderInt(row.numTxs);
-const renderSize = (row) => {
-  if (row.size < 1024) {
-    return row.size + ' B';
-  } else if (row.size < 1024 * 1024) {
-    return (row.size / 1000).toFixed(2) + ' kB';
+const renderAge = timestamp => moment(timestamp * 1000).fromNow();
+const renderTemplate = height => '<a href="/block-height/' + height + '">' + renderInt(height) + '</a>';
+const renderHash = (hash, _type, _row, meta) => {
+  const api = new $.fn.dataTable.Api( meta.settings );
+  const isHidden = !api.column(4).responsiveHidden();
+  let minifiedHash = minifyHash(hash)
+
+  if (isHidden) {
+    minifiedHash = minifiedHash.split('.')[0];
+  }
+
+  return `<a href="/block/${hash}">${minifiedHash}</a>`
+};
+const renderNumtTxs = numTxs => renderInt(numTxs);
+const renderSize = size => {
+  if (size < 1024) {
+    return size + ' B';
+  } else if (size < 1024 * 1024) {
+    return (size / 1000).toFixed(2) + ' kB';
   } else {
-    return (row.size / 1000000).toFixed(2) + ' MB';
+    return (size / 1000000).toFixed(2) + ' MB';
   }
 };
-const renderDifficulty = (row) => {
-  const estHashrate = row.difficulty * 0xffffffff / 600;
+const renderDifficulty = difficulty => {
+  const estHashrate = difficulty * 0xffffffff / 600;
 
   if (estHashrate < 1e12) {
     return (estHashrate / 1e9).toFixed(2) + ' GH/s';
@@ -39,7 +49,7 @@ const renderDifficulty = (row) => {
     return (estHashrate / 1e18).toFixed(2) + ' EH/s';
   }
 };
-const renderTimestamp = (row) => moment(row.timestamp * 1000).format('ll, LTS');
+const renderTimestamp = timestamp => moment(timestamp * 1000).format('ll, LTS');
 
 
 // state
@@ -67,11 +77,13 @@ const updateParameters = params => {
 
 const updateLoading = (status) => {
   if (status) {
-    $('.loader__container').removeClass('hidden');
+    $('#blocks-table > tbody').addClass('blur');
+    $('.loader__container--fullpage').removeClass('hidden');
     $('#pagination').addClass('hidden');
     $('#footer').addClass('hidden');
   } else {
-    $('.loader__container').addClass('hidden');
+    $('#blocks-table > tbody').removeClass('blur');
+    $('.loader__container--fullpage').addClass('hidden');
     $('#pagination').removeClass('hidden');
     $('#footer').removeClass('hidden');
   }
@@ -80,14 +92,8 @@ const updateLoading = (status) => {
 
 // data fetching
 const updateTable = (startPosition, endPosition) => {
-  $$('blocks-table').clearAll();
   updateLoading(true);
-
-  webix.ajax().get(`/api/blocks/${endPosition}/${startPosition}`)
-    .then(res => {
-      const results = res.json();
-      $$('blocks-table').parse(results);
-    });
+  $('#blocks-table').dataTable().api().ajax.url(`/api/blocks/${endPosition}/${startPosition}`).load()
 }
 
 // pagination
@@ -253,36 +259,69 @@ const dataTable = () => {
     tzString = moment.utc(moment.duration(tzOffset, 'minutes').asMilliseconds()).format('-HH:mm');
   }
 
-  webix.ui({
-    id: "blocks-table",
-    container: "blocks-table",
-    view: "datatable",
-    css: 'datatable__block_listing',
-    hover: 'datatable__block_listing-hover',
-    scroll: false,
-    columns:[
-      { adjust: true, id: "age", header: "Age", template: renderAge },
-      { width: 80, id: "height", header: "Height", template: renderTemplate },
-      { adjust: true, id: "numTxs", header: "Transactions", template: renderNumtTxs },
-      { fillspace: true, id: "hash", header: "Block Hash", css: "hash", template: renderHash },
-      { width: 100, id: "size", header: "Size", css: "size", template: renderSize },
-      { width: 130, id: "difficulty", header: "Est. Hashrate", template: renderDifficulty },
-      { adjust: true, id: "timestamp", header: "Date (UTC" + tzString + ")", template: renderTimestamp },
-    ],
-    autoheight: true,
-    on: {
-      onAfterLoad: () => updateLoading(false),
-    }
-  });	
-}
+  $('#date').text(`Date (${tzString})`)
 
+  $('#blocks-table').DataTable({
+    searching: false,
+    lengthMenu: [50, 100, 250, 500, 1000],
+    pageLength: DEFAULT_ROWS_PER_PAGE,
+    language: {
+      loadingRecords: '',
+      zeroRecords: '',
+      emptyTable: '',
+    },
+    order: [ [ 1, 'desc' ] ],
+    responsive: {
+        details: {
+            type: 'column',
+            target: -1
+        }
+    },
+    columnDefs: [ {
+        className: 'dtr-control',
+        orderable: false,
+        targets:   -1
+    } ],
+    columns: [
+      { name: 'age', data: 'timestamp', orderable: false, render: renderAge },
+      { data: 'height', render: renderTemplate },
+      { data: 'numTxs', render: renderNumtTxs },
+      { data: 'hash', orderable: false, className: 'hash', render: renderHash },
+      { data: 'size', orderable: false, render: renderSize },
+      { data: 'difficulty', orderable: false, render: renderDifficulty },
+      { name: 'timestamp', data: 'timestamp', render: renderTimestamp },
+      { name: 'responsive', render: () => '' },
+    ]
+  });
+
+  params = getParameters();
+  $('#blocks-table').dataTable().api().page.len(params.rows);
+}
 
 // events
 $(window).resize(() => {
   const { currentPage, pageArray } = generatePaginationUIParams();
   generatePaginationUI(currentPage, pageArray);
+  $('#blocks-table').DataTable().responsive.rebuild();
+  $('#blocks-table').DataTable().responsive.recalc();
 });
 
+// datatable events
+$('#blocks-table').on('init.dt', () => {
+  $('.datatable__length-placeholder').remove();
+} );
+
+$('#blocks-table').on('length.dt', (e, settings, rows) => {
+  params = getParameters();
+
+  if (params.rows !== rows) {
+    reRenderPage({ rows });
+  }
+} );
+
+$('#blocks-table').on('xhr.dt', () => {
+  updateLoading(false);
+} );
 
 // Basically a fake refresh, dynamically updates everything
 // according to new params
@@ -298,7 +337,6 @@ const reRenderPage = params => {
   const { currentPage, pageArray } = generatePaginationUIParams();
   generatePaginationUI(currentPage, pageArray);
 };
-
 
 // main
 webix.ready(() => {

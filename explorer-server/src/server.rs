@@ -65,6 +65,12 @@ impl Server {
             num_txs: u64,
             median_time: i64,
         }
+        #[derive(Serialize)]
+        #[serde(rename_all = "camelCase")]
+        struct BlockJsonResponse {
+            data: Vec<Block>,
+        }
+
         let mut json_blocks = Vec::with_capacity(blocks.len());
         for (block_hash, block) in blocks.into_iter().rev() {
             json_blocks.push(Block {
@@ -79,7 +85,8 @@ impl Server {
             });
         }
 
-        Ok(serde_json::to_string(&json_blocks)?)
+        let json_response = BlockJsonResponse { data: json_blocks };
+        Ok(serde_json::to_string(&json_response)?)
     }
 }
 

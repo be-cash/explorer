@@ -1,14 +1,41 @@
 {% extends "base.html" %}
 
-{% import "components/loader.html" as loader %}
+{% import "components/loader_fullpage.html" as loader %}
 
 {% block body_classes %}overflow-y-scroll{% endblock %}
 {% block footer_classes %}hidden{% endblock %}
 
 {% block content %}
   <div class="ui container">
-    <div id="blocks-table" class="block-listing__datatable-container"></div>
     {% call loader::render() %}
+    <div class="dataTables_length datatable__length-placeholder" id="blocks-table_length">
+      <label>
+        Show
+        <select name="blocks-table_length" aria-controls="blocks-table" class="">
+          <option value="100">100</option>
+          <option value="250">250</option>
+          <option value="500">500</option>
+          <option value="1000">1,000</option>
+        </select>
+        entries
+      </label>
+    </div>
+    <table id="blocks-table" class="block-listing__datatable dataTable compact responsive nowrap no-footer" style="width: 100%">
+      <thead>
+          <tr>
+              <th>Age</th>
+              <th>Height</th>
+              <th>Txs</th>
+              <th>Block Hash</th>
+              <th>Size</th>
+              <th>Est. Hashrate</th>
+              <th id="date">Date ()</th>
+              <th></th>
+          </tr>
+      </thead>
+      <tbody class="blur">
+      </tbody>
+    </table>
   </div>
 
   <div class="ui container">
@@ -16,5 +43,5 @@
     </div>
   </div>
 
-  <script type="text/javascript" src="/code/blocks.js"></script>
+  <script type="text/javascript" src="/code/blocks.js?hash=80d7734"></script>
 {% endblock %}

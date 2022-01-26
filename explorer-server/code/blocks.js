@@ -105,8 +105,8 @@ const generatePaginationRequestParams = () => {
   return [ startPosition, endPosition ];
 };
 
-const determinePaginationSlots = (lastPage, paddedBlocks) => {
-  const availableWidth = $('.ui.container').width();
+const determinePaginationSlots = lastPage => {
+  let availableWidth = $('.ui.container').width();
 
   // pagination slot
   const padding = 2 * 16;
@@ -116,22 +116,21 @@ const determinePaginationSlots = (lastPage, paddedBlocks) => {
   const tier3 = padding + 3 * letter;
   const tier4 = padding + 4 * letter;
 
-  let averageSlotWidth = 62;
-  let paddedBlockWidth;
+  let predictedTier;
   if (lastPage > 0 && lastPage < 9) {
-    paddedBlockWidth = paddedBlocks * tier1;
+    predictedTier = tier1;
   } else if (lastPage > 9 && lastPage <= 99) {
-    paddedBlockWidth = paddedBlocks * tier2;
+    predictedTier = tier2;
   } else if (lastPage > 99 && lastPage <= 999) {
-    paddedBlockWidth = paddedBlocks * tier3;
+    predictedTier = tier3;
   } else if (lastPage > 999 && lastPage <= 9999) {
-    paddedBlockWidth = paddedBlocks * tier4;
+    predictedTier = tier4;
   }
 
-  const knownAverageSlotWidth = (tier1 + paddedBlockWidth + tier4) / paddedBlocks + 2;
-  averageSlotWidth = (averageSlotWidth + knownAverageSlotWidth) / 2;
+  availableWidth -= tier1
+  availableWidth -= predictedTier
 
-  return Math.floor((availableWidth) / averageSlotWidth);
+  return Math.round((availableWidth) / predictedTier);
 };
 
 const findClosest = (haystack, needle) => (
@@ -140,42 +139,60 @@ const findClosest = (haystack, needle) => (
   ))
 );
 
-const generatePaginationArray = (max, slots) => {
-  const validSteps = [1, 5, 10, 100, 200, 300]; // usable increments
-  const stepValues = validSteps.map(step => Math.ceil(max / step)); // realm of possibilities
+const generatePaginationArray = (currentPage, max, slots) => {
+  let increments;
 
-  // find closest
-  let bestValueIndex = stepValues.indexOf(findClosest(stepValues, slots));
-  if (stepValues[bestValueIndex] === 1) { bestValueIndex-- } // go to prev increment
-
-  const bestStep = validSteps[bestValueIndex]
-  const bestValue = stepValues[bestValueIndex]
-  const pageArray = [bestStep];
-
-  // generate page array
-  for (i = 0; i < bestValue - 1; i++) {
-    pageArray.push(pageArray.slice(-1)[0] + bestStep);
+  if (slots <= 6) {
+    increments = [1, 100, 500, 1000, 2000, 4000];
+  }
+  else if (slots <= 10) {
+    increments = [1, 10, 50, 100, 500, 1000, 2000, 4000];
+  }
+  else {
+    increments = [1, 2, 10, 20, 50, 100, 500, 1000, 2000, 4000];
   }
 
-  // if spilling over: shift everything to the right
-  if (pageArray.slice(-1)[0] > max) {
-    pageArray.pop()
-    pageArray.unshift(pageArray[0] - validSteps[bestValueIndex - 1]);
-  }
+  let pageArray = [];
 
-  // recursive case: under (there are slots left)
-  if (bestValue < slots) {
-    return generatePaginationArray(pageArray[0], slots - bestValue + 1).concat(pageArray.slice(1));
-  }
+  for (i = 0; i < Math.floor(slots / 2); i++) {
+    const currentIncrement = increments[i];
 
-  // normal case: over (criss cross edges until equal)
-  if (bestValue > slots) {
-    for (i = 0; i < bestValue - slots; i++) {
-      if (i % 2) { pageArray.pop() } else { pageArray.shift() }
+    if (!currentIncrement || (currentPage - currentIncrement <= 1)) {
+      break;
+    }
+
+    const value = currentPage - currentIncrement
+    const precision = String(value).length - 1
+
+    if (currentIncrement >= 10) {
+      pageArray.push(parseFloat(value.toPrecision(precision)));
+    } else {
+      pageArray.push(value);
     }
   }
 
-  // normal case: equal (do nothing)
+  pageArray = pageArray.reverse();
+  if (currentPage != 1) { pageArray.push(currentPage) };
+
+  const remainingSlots = slots - pageArray.length;
+  for (i = 0; i < remainingSlots; i++) {
+    const currentIncrement = increments[i];
+    const value  = currentPage + currentIncrement;
+
+    if (!currentIncrement || (value > max)) {
+      break;
+    }
+
+    const precision = String(value).length - 1
+
+    if (currentIncrement >= 10) {
+      pageArray.push(parseFloat(value.toPrecision(precision)));
+    } else {
+      pageArray.push(value);
+    }
+  }
+
+  if (currentPage == max) { pageArray.pop() };
   return pageArray;
 };
 
@@ -184,19 +201,11 @@ const generatePaginationUIParams = () => {
   const blockHeight = getBlockHeight();
   const lastPage = Math.ceil(blockHeight / rows);
 
-  const reservedSlots = 2; // reserve for first and last
-  const slots = determinePaginationSlots(lastPage, 6) - reservedSlots;
+  const slots = determinePaginationSlots(lastPage);
 
-  const pageArray = generatePaginationArray(lastPage, slots)
+  const pageArray = generatePaginationArray(currentPage, lastPage, slots)
   pageArray.unshift(1)
   pageArray.push(lastPage)
-
-  // if currentPage not in the array replace the closest
-  const closestPage = findClosest(pageArray, currentPage);
-  if (closestPage !== currentPage) {
-    const closestPageIndex = pageArray.indexOf(findClosest(pageArray, currentPage));
-    pageArray[closestPageIndex] = currentPage;
-  }
 
   return { currentPage, pageArray };
 };
@@ -205,27 +214,19 @@ const generatePaginationUI = (currentPage, pageArray) => {
   const path = window.location.pathname;
 
   // DOM building blocks
-  const activeItem = (number) => `<a class="item active" href="${path}?page=${number}" onclick="goToPage(event, ${number})">${number}</a>`;
+  const activeItem = (number) => `<a class="item active">${number}</a>`;
   const item = (number) => `<a class="item" href="${path}?page=${number}" onclick="goToPage(event, ${number})">${number}</a>`;
-  const iconItem = (number, icon) => `<a class="item pagination__nav-button" href="${path}?page=${number}" onclick="goToPage(event, ${number})">${icon}</a>`;
-
-  const prev = iconItem(currentPage - 1, '<i class="icon angle left"></i>')
-  const next = iconItem(currentPage + 1, '<i class="icon angle right"></i>')
 
   let pagination = '';
   pagination += '<div class="ui pagination menu">';
 
   pageArray.forEach((pageNumber, i) => {
-    if (i === 0) { pagination += prev }
-
     if (pageNumber === currentPage) {
       pagination += activeItem(pageNumber)
       return;
     }
 
     pagination += item(pageNumber);
-
-    if (i === pageArray.length - 1) { pagination += next }
   });
 
   pagination += '</div>';

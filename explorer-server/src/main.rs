@@ -98,6 +98,14 @@ async fn main() -> Result<()> {
             },
         );
 
+    let data_address_balances = warp::path!("api" / "address" / String / "balances")
+        .and(with_server(&server))
+        .and_then(
+            |address: String, server: ServerRef| async move {
+                server.data_address_balances(&address).await.map_err(err)
+            },
+        );
+
     let js = warp::path("code").and(warp::fs::dir("./code"));
 
     let favicon = warp::path!("favicon.ico").and(warp::fs::file("./assets/favicon.png"));
@@ -115,6 +123,7 @@ async fn main() -> Result<()> {
         .or(data_blocks)
         .or(data_block_txs)
         .or(data_address_txs)
+        .or(data_address_balances)
         .or(js)
         .or(favicon)
         .or(assets)

@@ -1,48 +1,17 @@
 const getAddress = () => window.location.pathname.split('/')[2];
 
-var isSatsTableLoaded = false;
-function loadSatsTable() {
-  if (!isSatsTableLoaded) {
-    webix.ui({
-      container: "sats-coins-table",
-      view: "datatable",
-      columns:[
-        {
-          id: "outpoint",
-          header: "Outpoint",
-          css: "hash",
-          adjust: true,
-          template: function (row) {
-            return '<a href="/tx/' + row.txHash + '">' + 
-              row.txHash + ':' + row.outIdx +
-              (row.isCoinbase ? '<div class="ui green horizontal label">Coinbase</div>' : '') +
-              '</a>';
-          },
-        },
-        {
-          id: "blockHeight",
-          header: "Block Height",
-          adjust: true,
-          template: function (row) {
-            return '<a href="/block-height/' + row.blockHeight + '">' + renderInteger(row.blockHeight) + '</a>';
-          },
-        },
-        {
-          id: "amount",
-          header: "XEC amount",
-          adjust: true,
-          template: function (row) {
-            return renderSats(row.satsAmount) + ' XEC';
-          },
-        },
-      ],
-      autoheight: true,
-      autowidth: true,
-      data: addrBalances["main"].utxos,
-    });
-    isSatsTableLoaded = true;
-  }
-}
+const renderOutpoint = (_value, _type, row) => {
+  const { txHash, outIdx } = row;
+  const label = row.isCoinbase ? '<div class="ui green horizontal label">Coinbase</div>' : '';
+  return `<a href="/tx/${txHash}">${txHash}:${outIdx} ${label}</a>`;
+};
+
+const renderOutpointHeight = (_value, _type, row) => {
+  const { blockHeight } = row;
+  return `<a href="/block-height/${blockHeight}">${renderInteger(blockHeight)}</a>`;
+};
+
+const renderXEC = sats => `${renderSats(sats)} XEC`;
 
 var isTokenTableLoaded = {};
 function loadTokenTable(tokenId) {
@@ -156,19 +125,19 @@ const renderToken = (_value, _type, row) => {
   return '';
 };
 
-const updateLoading = (status) => {
+const updateLoading = (status, tableId) => {
   if (status) {
-    $('#address-txs-table > tbody').addClass('blur');
+    $(`#${tableId} > tbody`).addClass('blur');
     $('#pagination').addClass('hidden');
     $('#footer').addClass('hidden');
   } else {
-    $('#address-txs-table > tbody').removeClass('blur');
+    $(`#${tableId} > tbody`).removeClass('blur');
     $('#pagination').removeClass('hidden');
     $('#footer').removeClass('hidden');
   }
 };
 
-const datatable = () => {
+const datatableTxs = () => {
   const address = getAddress();
 
   $('#address-txs-table').DataTable({
@@ -181,7 +150,7 @@ const datatable = () => {
       emptyTable: '',
     },
     ajax: `/api/address/${address}/transactions`,
-    order: [],
+    order: [ ],
     responsive: {
         details: {
             type: 'column',
@@ -209,8 +178,49 @@ const datatable = () => {
   });
 }
 
+const datatableOutpoints = () => {
+  const address = getAddress();
+
+  $('#outpoints-table').DataTable({
+    searching: false,
+    lengthMenu: [50, 100, 250, 500, 1000],
+    pageLength: DEFAULT_ROWS_PER_PAGE,
+    language: {
+      loadingRecords: '',
+      zeroRecords: '',
+      emptyTable: '',
+    },
+    ajax: {
+      url: `/api/address/${address}/balances`,
+      dataSrc: response => response.data["main"].utxos,
+    },
+    order: [ ],
+    responsive: {
+        details: {
+            type: 'column',
+            target: -1
+        }
+    },
+    columnDefs: [ {
+        className: 'dtr-control',
+        orderable: false,
+        targets:   -1
+    } ],
+    columns:[
+      { name: "outpoint", className: "hash", render: renderOutpoint },
+      { name: "block", render: renderOutpointHeight },
+      { name: "xec", data: 'satsAmount', render: renderXEC },
+      { name: 'responsive', render: () => '' },
+    ],
+  });
+}
+
 $('#address-txs-table').on('xhr.dt', () => {
-  updateLoading(false);
+  updateLoading(false, 'address-txs-table');
+});
+
+$('#outpoints-table').on('xhr.dt', () => {
+  updateLoading(false, 'outpoints-table');
 });
 
 const updateTable = (paginationRequest) => {
@@ -243,6 +253,9 @@ const reRenderPage = params => {
 };
 
 $(document).ready(() => {
-  datatable();
-  reRenderPage();
+  datatableTxs();
+  datatableOutpoints();
+
+  $('.menu .item').tab();
+  reRenderPage()
 });

@@ -89,3 +89,9 @@ pub struct JsonBlocksResponse {
 pub struct JsonTxsResponse {
     pub data: Vec<JsonTx>,
 }
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JsonBalanceResponse {
+    pub data: HashMap<String, JsonBalance>,
+}

@@ -12,9 +12,6 @@
               <h4>Balance</h4>
               <h1>
                 {{ total_xec|render_sats|safe }} XEC
-                <a class="show-coins" onclick="$('#sats-coins').toggle(); loadSatsTable();">
-                  Show Coins <i class="icon chevron circle down"></i>
-                </a>
               </h1>
 
               {% if token_dust > 0 %}
@@ -126,25 +123,47 @@
       {% endfor %}
     </table>
 
-    <table id="address-txs-table" class="block-listing__datatable dataTable compact responsive nowrap no-footer" style="width: 100%">
-      <thead>
-          <tr>
-              <th>Age</th>
-              <th>Date</th>
-              <th>ID</th>
-              <th>Block Height</th>
-              <th>Size</th>
-              <th>Fee [sats]</th>
-              <th>Inputs</th>
-              <th>Outputs</th>
-              <th>Amount XEC</th>
-              <th>Amount Token</th>
-              <th></th>
-          </tr>
-      </thead>
-      <tbody class="blur">
-      </tbody>
-    </table>
+    <div class="address__menu-tabs ui top basic secondary menu">
+      <div class="address__menu-tab item active" data-tab="transactions">Transactions</div>
+      <div class="address__menu-tab item" data-tab="outpoints">Outpoints</div>
+    </div>
+
+    <div class="ui bottom tab active" data-tab="transactions">
+      <table id="address-txs-table" class="block-listing__datatable dataTable compact responsive nowrap no-footer" style="width: 100%">
+        <thead>
+            <tr>
+                <th>Age</th>
+                <th>Date</th>
+                <th>ID</th>
+                <th>Block Height</th>
+                <th>Size</th>
+                <th>Fee [sats]</th>
+                <th>Inputs</th>
+                <th>Outputs</th>
+                <th>Amount XEC</th>
+                <th>Amount Token</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody class="blur">
+        </tbody>
+      </table>
+    </div>
+
+    <div class="ui bottom tab" data-tab="outpoints">
+      <table id="outpoints-table" class="block-listing__datatable dataTable compact responsive nowrap no-footer" style="width: 100%">
+        <thead>
+            <tr>
+                <th>Outpoint</th>
+                <th>Block</th>
+                <th>XEC Amount</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody class="blur">
+        </tbody>
+      </table>
+    </div>
 
     <div class="ui container">
       <div id="pagination" class="bottom-pagination" data-total-entries="{{ address_num_txs }}">

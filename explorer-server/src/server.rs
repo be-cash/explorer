@@ -19,7 +19,7 @@ use crate::{
         calculate_block_difficulty, cash_addr_to_script_type_payload, from_be_hex, to_be_hex,
         to_legacy_address,
     },
-    server_primitives::{JsonBalance, JsonBlock, JsonBlocksResponse, JsonTxsResponse, JsonUtxo},
+    server_primitives::{JsonBalance, JsonBlock, JsonBlocksResponse, JsonTxsResponse, JsonUtxo, JsonBalanceResponse},
     templating::{
         AddressTemplate, BlockTemplate, BlocksTemplate, HomepageTemplate, TransactionTemplate,
     },
@@ -135,6 +135,70 @@ impl Server {
         let json_txs = tx_history_to_json(&address, address_tx_history, &json_tokens)?;
 
         Ok(serde_json::to_string(&JsonTxsResponse { data: json_txs })?)
+    }
+
+    pub async fn data_address_balances(&self, address: &str) -> Result<impl Reply> {
+        let address = CashAddress::parse_cow(address.into())?;
+
+        let (script_type, script_payload) = cash_addr_to_script_type_payload(&address);
+        let script_endpoint = self.chronik.script(script_type, &script_payload);
+        let utxos = script_endpoint.utxos().await?;
+
+        let mut token_utxos: Vec<Utxo> = Vec::new();
+        let mut json_balances: HashMap<String, JsonBalance> = HashMap::new();
+        let mut main_json_balance: JsonBalance = JsonBalance {
+            token_id: None,
+            sats_amount: 0,
+            token_amount: 0,
+            utxos: Vec::new(),
+        };
+
+        for utxo_script in utxos.into_iter() {
+            for utxo in utxo_script.utxos.into_iter() {
+                let OutPoint { txid, out_idx } = &utxo.outpoint.as_ref().unwrap();
+                let mut json_utxo = JsonUtxo {
+                    tx_hash: to_be_hex(txid),
+                    out_idx: *out_idx,
+                    sats_amount: utxo.value,
+                    token_amount: 0,
+                    is_coinbase: utxo.is_coinbase,
+                    block_height: utxo.block_height,
+                };
+
+                match (&utxo.slp_meta, &utxo.slp_token) {
+                    (Some(slp_meta), Some(slp_token)) => {
+                        let token_id_hex = to_be_hex(&slp_meta.token_id);
+
+                        json_utxo.token_amount = slp_token.amount;
+
+                        match json_balances.entry(token_id_hex) {
+                            Entry::Occupied(mut entry) => {
+                                let entry = entry.get_mut();
+                                entry.sats_amount += utxo.value;
+                                entry.token_amount += i128::from(slp_token.amount);
+                                entry.utxos.push(json_utxo);
+                            }
+                            Entry::Vacant(entry) => {
+                                entry.insert(JsonBalance {
+                                    token_id: Some(to_be_hex(&slp_meta.token_id)),
+                                    sats_amount: utxo.value,
+                                    token_amount: slp_token.amount.into(),
+                                    utxos: vec![json_utxo],
+                                });
+                            }
+                        }
+
+                        token_utxos.push(utxo);
+                    }
+                    _ => {
+                        main_json_balance.utxos.push(json_utxo);
+                    }
+                };
+            }
+        }
+        json_balances.insert(String::from("main"), main_json_balance);
+
+        Ok(serde_json::to_string(&JsonBalanceResponse { data: json_balances })?)
     }
 }
 

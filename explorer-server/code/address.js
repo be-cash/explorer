@@ -176,6 +176,9 @@ const datatableTxs = () => {
       { name: 'responsive', render: () => '' },
     ],
   });
+
+  const { rows } = window.state.getParameters('transactions');
+  $('#address-txs-table').dataTable().api().page.len(rows);
 }
 
 const datatableOutpoints = () => {
@@ -192,7 +195,12 @@ const datatableOutpoints = () => {
     },
     ajax: {
       url: `/api/address/${address}/balances`,
-      dataSrc: response => response.data["main"].utxos,
+      dataSrc: response => {
+        window.state.setPaginationTotalEntries('outpoints', response.data['main'].utxos.length)
+        reRenderPage();
+
+        return response.data['main'].utxos;
+      }
     },
     order: [ ],
     responsive: {
@@ -213,7 +221,10 @@ const datatableOutpoints = () => {
       { name: 'responsive', render: () => '' },
     ],
   });
-}
+
+  const { rows } = window.state.getParameters('outpoints');
+  $('#outpoints-table').dataTable().api().page.len(rows);
+};
 
 $('#address-txs-table').on('xhr.dt', () => {
   updateLoading(false, 'address-txs-table');
@@ -223,7 +234,13 @@ $('#outpoints-table').on('xhr.dt', () => {
   updateLoading(false, 'outpoints-table');
 });
 
-const updateTable = (paginationRequest) => {
+$('#outpoints-table').on('init.dt', () => {
+  const { rows, page } = window.state.getParameters('outpoints');
+  $('#outpoints-table').dataTable().api().page.len(rows);
+  $('#outpoints-table').DataTable().page(page).draw('page');
+});
+
+const updateTransactionsTable = paginationRequest => {
   const params = new URLSearchParams(paginationRequest).toString();
   const address = getAddress();
 
@@ -231,22 +248,46 @@ const updateTable = (paginationRequest) => {
   $('#address-txs-table').dataTable().api().ajax.url(`/api/address/${address}/transactions?${params}`).load()
 }
 
+const updateOutpointsTable = paginationRequest => {
+  const { page } = paginationRequest;
+  $('#outpoints-table').DataTable().page(page).draw('page');
+}
+
 const goToPage = (event, page) => {
   event.preventDefault();
   reRenderPage({ page });
 };
 
-$(document).on('change', '[name="address-txs-table_length"]', event => {
-  reRenderPage({ rows: event.target.value, page: 1 });
+$(document).on('change', '[name*="-table_length"]', event => {
+  reRenderPage({
+    rows: event.target.value,
+    page: 1,
+  });
 });
 
 const reRenderPage = params => {
   if (params) {
-    window.state.updateParameters(params)
+    params = window.state.updateParameters(params);
+  } else {
+    params = window.state.getParameters();
+
+    if (!params.currentTab) {
+      window.state.updateParameters({ currentTab: 'transactions' });
+    }
+  }
+
+  if (params.currentTab) {
+    $('.menu .item').tab('change tab', params.currentTab);
   }
 
   const paginationRequest = window.pagination.generatePaginationRequest();
-  updateTable(paginationRequest);
+
+  if (params.currentTab == 'transactions') {
+    updateTransactionsTable(paginationRequest);
+  }
+  else if (params.currentTab == 'outpoints') {
+    updateOutpointsTable(paginationRequest)
+  }
 
   const { currentPage, pageArray } = window.pagination.generatePaginationUIParams();
   window.pagination.generatePaginationUI(currentPage, pageArray);
@@ -256,6 +297,11 @@ $(document).ready(() => {
   datatableTxs();
   datatableOutpoints();
 
-  $('.menu .item').tab();
-  reRenderPage()
+  $('.menu .item').tab({
+    onVisible: tabPath => (
+      reRenderPage({ currentTab: tabPath })
+    )
+  });
+
+  reRenderPage();
 });

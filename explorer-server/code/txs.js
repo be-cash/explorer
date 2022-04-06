@@ -93,15 +93,6 @@ const datatable = () => {
   $('#txs-table').dataTable().api().page.len(params.rows);
 };
 
-const footerDynamicPositionFix = () => {
-  const windowHeight = $(window).height();
-  const footerPosition = $('#footer').position();
-  const diff = Math.ceil(windowHeight - (footerPosition.top + 100));
-
-  if (diff > 0) {
-    $('#txs-table').css('height', `+=${diff}`)
-  }
-};
 
 // events
 $(window).resize(() => {
@@ -126,6 +117,7 @@ $('#txs-table').on('length.dt', (e, settings, rows) => {
 $('#txs-table').on('xhr.dt', () => {
   updateLoading(false);
 } );
+
 
 // Basically a fake refresh, dynamically updates everything
 // according to new params

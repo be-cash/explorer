@@ -3,6 +3,10 @@ h1, h2, h3, h4, h5 {
   color: #161c33;
 }
 
+#main {
+  min-height: calc(100vh - 100px);
+}
+
 .no-padding {
   padding: 0!important;
 }

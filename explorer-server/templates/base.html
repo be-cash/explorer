@@ -37,29 +37,31 @@
 </head>
 
 <body class="{% block body_classes %}{% endblock %}">
-  <div class="ui main menu">
-    <a class="header item" href="/">
-      <img class="logo" src="/assets/logo.png" />
-    </a>
+  <div id="main">
+    <div class="ui main menu">
+      <a class="header item" href="/">
+        <img class="logo" src="/assets/logo.png" />
+      </a>
 
-    <div class="item">
-      <div id="search-box" class="ui transparent icon input">
-        <input
-          id="search-bar"
-          type="text"
-          placeholder="Search blocks, transactions, adddresses, tokens..."
-          onchange="searchBarChange()"
-          onkeyup="searchBarChange()"
-        >
-          <i id="#search-button" class="search link icon" onclick="searchButton()"></i>
-        </input>
+      <div class="item">
+        <div id="search-box" class="ui transparent icon input">
+          <input
+            id="search-bar"
+            type="text"
+            placeholder="Search blocks, transactions, adddresses, tokens..."
+            onchange="searchBarChange()"
+            onkeyup="searchBarChange()"
+          >
+            <i id="#search-button" class="search link icon" onclick="searchButton()"></i>
+          </input>
+        </div>
       </div>
+
+      <a class=" right floated item" href="/blocks">Blocks</a>
     </div>
 
-    <a class=" right floated item" href="/blocks">Blocks</a>
+    {% block content %}{% endblock %}
   </div>
-
-  {% block content %}{% endblock %}
 
   <div id="footer" class="{% block footer_classes %}{% endblock %} ui inverted vertical footer segment">
     <div class="ui container">be.cash Explorer</div>

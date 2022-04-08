@@ -47,7 +47,9 @@ impl Server {
         };
         Ok(warp::reply::html(blocks_template.render().unwrap()))
     }
+}
 
+impl Server {
     pub async fn data_blocks(&self, start_height: u32, end_height: u32) -> Result<impl Reply> {
         let num_blocks = end_height.checked_sub(start_height).unwrap() + 1;
         let blocks = self.indexer.db().block_range(start_height, num_blocks)?;
@@ -67,7 +69,7 @@ impl Server {
         }
         #[derive(Serialize)]
         #[serde(rename_all = "camelCase")]
-        struct BlockJsonResponse {
+        struct JsonResponse {
             data: Vec<Block>,
         }
 
@@ -85,13 +87,17 @@ impl Server {
             });
         }
 
-        let json_response = BlockJsonResponse { data: json_blocks };
+        let json_response = JsonResponse { data: json_blocks };
         Ok(serde_json::to_string(&json_response)?)
     }
-}
 
-impl Server {
     pub async fn data_block_txs(&self, block_hash: &str) -> Result<impl Reply> {
+        #[derive(Serialize)]
+        #[serde(rename_all = "camelCase")]
+        struct JsonResponse {
+            data: Vec<JsonTx>,
+        }
+
         let block_hash = from_le_hex(block_hash)?;
         let block_txs = self.indexer.block_txs(&block_hash).await?;
         let json_txs = self.json_txs(
@@ -113,16 +119,122 @@ impl Server {
             txs.push(tx);
         }
 
-        #[derive(Serialize)]
-        #[serde(rename_all = "camelCase")]
-        struct BlockTxsJsonResponse {
-            data: Vec<JsonTx>,
-        }
-
-        let json_response = BlockTxsJsonResponse { data: txs };
+        let json_response = JsonResponse { data: txs };
         Ok(serde_json::to_string(&json_response)?)
     }
 
+    pub async fn data_address_txs(&self, address: &str, query: HashMap<String, String>) -> Result<impl Reply> {
+        #[derive(Serialize)]
+        #[serde(rename_all = "camelCase")]
+        struct JsonResponse {
+            data: Vec<JsonTx>,
+        }
+
+        let offset: usize = query.get("offset").map(|s| s.as_str()).unwrap_or("0").parse()?;
+        let take: usize = query.get("take").map(|s| s.as_str()).unwrap_or("100").parse()?;
+
+        let address = Address::from_cash_addr(address)?;
+        let sats_address = address.with_prefix(self.satoshi_addr_prefix);
+        let address_txs = self.indexer.db().address(&sats_address, offset, take)?;
+        let mut json_txs = self.json_txs(
+            address_txs
+                .iter()
+                .map(|(tx_hash, addr_tx, tx_meta)| {
+                    (tx_hash.as_ref(), addr_tx.timestamp, Some(addr_tx.block_height), tx_meta, (addr_tx.delta_sats, addr_tx.delta_tokens))
+                })
+        ).await?;
+        let balance = self.indexer.db().address_balance(&sats_address, offset, take)?;
+        let AddressBalance { balances: _, utxos } = balance;
+        for (token_id, _) in &utxos {
+            if let Some(token_id) = &token_id {
+                if !json_txs.token_indices.contains_key(token_id.as_ref()) {
+                    if let Some(token_meta) = self.indexer.db().token_meta(token_id)? {
+                        json_txs.token_indices.insert(token_id.to_vec(), json_txs.tokens.len());
+                        json_txs.tokens.push(JsonToken::from_token_meta(token_id, token_meta));
+                    }
+                }
+            }
+        }
+
+        let json_response = JsonResponse { data: json_txs.txs };
+        Ok(serde_json::to_string(&json_response)?)
+    }
+
+    pub async fn data_address_balances(&self, address: &str, query: HashMap<String, String>) -> Result<impl Reply> {
+        #[derive(Serialize)]
+        #[serde(rename_all = "camelCase")]
+        struct JsonResponse {
+            data: Vec<JsonBalance>,
+        }
+
+        let offset: usize = query.get("offset").map(|s| s.as_str()).unwrap_or("0").parse()?;
+        let take: usize = query.get("take").map(|s| s.as_str()).unwrap_or("100").parse()?;
+
+        let address = Address::from_cash_addr(address)?;
+        let sats_address = address.with_prefix(self.satoshi_addr_prefix);
+        let address_txs = self.indexer.db().address(&sats_address, offset, take)?;
+        let mut json_txs = self.json_txs(
+            address_txs
+                .iter()
+                .map(|(tx_hash, addr_tx, tx_meta)| {
+                    (tx_hash.as_ref(), addr_tx.timestamp, Some(addr_tx.block_height), tx_meta, (addr_tx.delta_sats, addr_tx.delta_tokens))
+                })
+        ).await?;
+        let balance = self.indexer.db().address_balance(&sats_address, offset, take)?;
+        let AddressBalance { balances, utxos } = balance;
+        for (token_id, _) in &utxos {
+            if let Some(token_id) = &token_id {
+                if !json_txs.token_indices.contains_key(token_id.as_ref()) {
+                    if let Some(token_meta) = self.indexer.db().token_meta(token_id)? {
+                        json_txs.token_indices.insert(token_id.to_vec(), json_txs.tokens.len());
+                        json_txs.tokens.push(JsonToken::from_token_meta(token_id, token_meta));
+                    }
+                }
+            }
+        }
+
+        let mut json_balances = utxos.into_iter().map(|(token_id, mut utxos)| {
+            let (sats_amount, token_amount) = balances[&token_id];
+            let token: Option<JsonToken>;
+            if let Some(token_meta) = token_id.and_then(|token_id| self.indexer.db().token_meta(&token_id).ok()?) {
+                token = token_id.and_then(|token_id| Some(JsonToken::from_token_meta(&token_id, token_meta)))
+            } else {
+                token = None
+            }
+
+            utxos.sort_by_key(|(_, utxo)| -utxo.block_height);
+            (
+                utxos.get(0).map(|(_, utxo)| utxo.block_height).unwrap_or(0),
+                JsonBalance {
+                    token_idx: token_id.and_then(|token_id| json_txs.token_indices.get(token_id.as_ref())).copied(),
+                    token: token,
+                    sats_amount,
+                    token_amount,
+                    utxos: utxos.into_iter().map(|(utxo_key, utxo)| JsonUtxo {
+                        tx_hash: to_le_hex(&utxo_key.tx_hash),
+                        out_idx: utxo_key.out_idx.get(),
+                        sats_amount: utxo.sats_amount,
+                        token_amount: utxo.token_amount,
+                        is_coinbase: utxo.is_coinbase,
+                        block_height: utxo.block_height,
+                    }).collect(),
+                }
+            )
+        }).collect::<Vec<_>>();
+        json_balances.sort_by_key(|(block_height, balance)| {
+            if balance.token_idx.is_none() {
+                i32::MIN
+            } else {
+                -block_height
+            }
+        });
+        let json_balances: Vec<JsonBalance> = json_balances.into_iter().map(|(_, balance)| balance).collect::<Vec<_>>();
+        let json_response = JsonResponse { data: json_balances };
+        Ok(serde_json::to_string(&json_response)?)
+    }
+}
+
+impl Server {
     async fn json_txs(&self, txs: impl ExactSizeIterator<Item=(&[u8], i64, Option<i32>, &TxMeta, (i64, i64))>) -> Result<JsonTxs> {
         let mut json_txs = Vec::with_capacity(txs.len());
         let mut token_indices = HashMap::<Vec<u8>, usize>::new();
@@ -317,6 +429,7 @@ impl Server {
                 utxos.get(0).map(|(_, utxo)| utxo.block_height).unwrap_or(0),
                 JsonBalance {
                     token_idx: token_id.and_then(|token_id| json_txs.token_indices.get(token_id.as_ref())).copied(),
+                    token: None,
                     sats_amount,
                     token_amount,
                     utxos: utxos.into_iter().map(|(utxo_key, utxo)| JsonUtxo {
@@ -332,18 +445,16 @@ impl Server {
         }).collect::<Vec<_>>();
         json_balances.sort_by_key(|(block_height, balance)| {
             if balance.token_idx.is_none() {
-                i32::MIN
+                i32::MAX
             } else {
                 -block_height
             }
         });
+        let (_, cash_balance) = json_balances.pop().unwrap();
         let json_balances: Vec<JsonBalance> = json_balances.into_iter().map(|(_, balance)| balance).collect::<Vec<_>>();
 
-        let encoded_txs = serde_json::to_string(&json_txs.txs)?.replace("'", r"\'");
-        let encoded_tokens = serde_json::to_string(&json_txs.tokens)?.replace("'", r"\'");
-        let encoded_balances = serde_json::to_string(&json_balances)?.replace("'", r"\'");
-
         let address_template = AddressTemplate {
+            cash_balance: cash_balance,
             json_balances: json_balances,
             token_dust: token_dust,
             address_num_txs: address_num_txs,
@@ -352,9 +463,6 @@ impl Server {
             sats_address: &sats_address,
             token_address: &token_address,
             legacy_address: legacy_address,
-            encoded_txs: encoded_txs,
-            encoded_tokens: encoded_tokens,
-            encoded_balances: encoded_balances,
         };
         Ok(warp::reply::html(address_template.render().unwrap()))
     }

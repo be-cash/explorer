@@ -1,52 +1,3 @@
-// data table rendering utilities
-const renderInt = (number) => {
-  var fmt = Intl.NumberFormat('en-EN').format(number);
-  var parts = fmt.split(',');
-  var str = '';
-  for (var i = 0; i < parts.length - 1; ++i) {
-    str += '<span class="digit-sep">' + parts[i] + '</span>';
-  }
-  str += '<span>' + parts[parts.length - 1] + '</span>';
-  return str;
-}
-const renderAge = timestamp => moment(timestamp * 1000).fromNow();
-const renderTemplate = height => '<a href="/block-height/' + height + '">' + renderInt(height) + '</a>';
-const renderHash = (hash, _type, _row, meta) => {
-  const api = new $.fn.dataTable.Api( meta.settings );
-  const isHidden = !api.column(4).responsiveHidden();
-  let minifiedHash = minifyHash(hash)
-
-  if (isHidden) {
-    minifiedHash = minifiedHash.split('.')[0];
-  }
-
-  return `<a href="/block/${hash}">${minifiedHash}</a>`
-};
-const renderNumtTxs = numTxs => renderInt(numTxs);
-const renderSize = size => {
-  if (size < 1024) {
-    return size + ' B';
-  } else if (size < 1024 * 1024) {
-    return (size / 1000).toFixed(2) + ' kB';
-  } else {
-    return (size / 1000000).toFixed(2) + ' MB';
-  }
-};
-const renderDifficulty = difficulty => {
-  const estHashrate = difficulty * 0xffffffff / 600;
-
-  if (estHashrate < 1e12) {
-    return (estHashrate / 1e9).toFixed(2) + ' GH/s';
-  } else if (estHashrate < 1e15) {
-    return (estHashrate / 1e12).toFixed(2) + ' TH/s';
-  } else if (estHashrate < 1e18) {
-    return (estHashrate / 1e15).toFixed(2) + ' PH/s';
-  } else {
-    return (estHashrate / 1e18).toFixed(2) + ' EH/s';
-  }
-};
-const renderTimestamp = timestamp => moment(timestamp * 1000).format('ll, LTS');
-
 const updateLoading = (status) => {
   if (status) {
     $('#blocks-table > tbody').addClass('blur');
@@ -90,34 +41,15 @@ const dataTable = () => {
   $('#date').text(`Date (${tzString})`)
 
   $('#blocks-table').DataTable({
-    searching: false,
-    lengthMenu: [50, 100, 250, 500, 1000],
-    pageLength: DEFAULT_ROWS_PER_PAGE,
-    language: {
-      loadingRecords: '',
-      zeroRecords: '',
-      emptyTable: '',
-    },
-    order: [ [ 1, 'desc' ] ],
-    responsive: {
-        details: {
-            type: 'column',
-            target: -1
-        }
-    },
-    columnDefs: [ {
-        className: 'dtr-control',
-        orderable: false,
-        targets:   -1
-    } ],
+    ...window.datatable.baseConfig,
     columns: [
-      { name: 'age', data: 'timestamp', orderable: false, render: renderAge },
-      { data: 'height', render: renderTemplate },
-      { data: 'numTxs', render: renderNumtTxs },
-      { data: 'hash', orderable: false, className: 'hash', render: renderHash },
-      { data: 'size', orderable: false, render: renderSize },
-      { data: 'difficulty', orderable: false, render: renderDifficulty },
-      { name: 'timestamp', data: 'timestamp', render: renderTimestamp },
+      { name: 'age', data: 'timestamp', orderable: false, render: window.datatable.renderAge },
+      { data: 'height', render: window.datatable.renderTemplate },
+      { data: 'numTxs', render: window.datatable.renderNumtTxs },
+      { data: 'hash', orderable: false, className: 'hash', render: window.datatable.renderBlockHash },
+      { data: 'size', orderable: false, render: window.datatable.renderSize },
+      { data: 'difficulty', orderable: false, render: window.datatable.renderDifficulty },
+      { name: 'timestamp', data: 'timestamp', render: window.datatable.renderTimestamp },
       { name: 'responsive', render: () => '' },
     ]
   });
@@ -159,7 +91,7 @@ const reRenderPage = params => {
     window.state.updateParameters(params)
   }
 
-  const [ startPosition, endPosition ] = window.pagination.generatePaginationRequestParams();
+  const [ startPosition, endPosition ] = window.pagination.generatePaginationRequestRange();
   updateTable(startPosition, endPosition);
 
   const { currentPage, pageArray } = window.pagination.generatePaginationUIParams();
@@ -167,7 +99,7 @@ const reRenderPage = params => {
 };
 
 // main
-webix.ready(() => {
+$(document).ready(() => {
   // init all UI elements
   dataTable();
 

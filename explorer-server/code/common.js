@@ -77,10 +77,6 @@ function renderSats(sats) {
   }
 }
 
-function renderTxHash(txHash) {
-  return txHash.substr(0, 10) + '&hellip;' + txHash.substr(60, 4)
-}
-
 var regHex32 = /^[0-9a-fA-F]{64}$/
 function searchBarChange() {
   if (event.key == 'Enter') {
@@ -120,6 +116,181 @@ const scrollToBottom = () => {
   $("html, body").animate({ scrollTop: pageHeight - 50 }, 250);
 };
 
+(function(datatable, $) {
+  const renderTxHash = hash => {
+    return hash.substr(0, 10) + '&hellip;' + hash.substr(60, 4)
+  }
+
+  const renderInt = (number) => {
+    var fmt = Intl.NumberFormat('en-EN').format(number);
+    var parts = fmt.split(',');
+    var str = '';
+    for (var i = 0; i < parts.length - 1; ++i) {
+      str += '<span class="digit-sep">' + parts[i] + '</span>';
+    }
+    str += '<span>' + parts[parts.length - 1] + '</span>';
+    return str;
+  }
+
+  datatable.baseConfig = {
+    searching: false,
+    lengthMenu: [50, 100, 250, 500, 1000],
+    pageLength: DEFAULT_ROWS_PER_PAGE,
+    language: {
+      loadingRecords: '',
+      zeroRecords: '',
+      emptyTable: '',
+    },
+    order: [ [ 1, 'desc' ] ],
+    responsive: {
+        details: {
+            type: 'column',
+            target: -1
+        }
+    },
+    columnDefs: [ {
+        className: 'dtr-control',
+        orderable: false,
+        targets:   -1
+    } ],
+  };
+
+  datatable.renderAge = timestamp => (
+    moment(timestamp * 1000).fromNow()
+  );
+
+  datatable.renderAddressAge = timestamp => {
+    if (timestamp == 0) {
+      return '<div class="ui gray horizontal label">Mempool</div>';
+    }
+    return moment(timestamp * 1000).fromNow();
+  };
+
+  datatable.renderTemplate = height => (
+    `<a href="/block-height/${height}">${renderInt(height)}</a>`
+  );
+
+  datatable.renderBlockHash = (hash, _type, _row, meta) => {
+    const api = new $.fn.dataTable.Api( meta.settings );
+    const isHidden = !api.column(4).responsiveHidden();
+    let minifiedHash = minifyHash(hash)
+
+    if (isHidden) {
+      minifiedHash = minifiedHash.split('.')[0];
+    }
+
+    return `<a href="/block/${hash}">${minifiedHash}</a>`
+  };
+
+  datatable.renderCompactTxHash = hash => (
+    `<a href="/tx/${hash}">${renderTxHash(hash)}</a>`
+  );
+
+  datatable.renderTxHash = hash => (
+    `<a href="/tx/${hash}">${hash}</a>`
+  );
+
+  datatable.renderNumtTxs = numTxs => (
+    renderInt(numTxs)
+  );
+
+  datatable.renderSize = size => {
+    if (size < 1024) {
+      return size + ' B';
+    } else if (size < 1024 * 1024) {
+      return (size / 1000).toFixed(2) + ' kB';
+    } else {
+      return (size / 1000000).toFixed(2) + ' MB';
+    }
+  };
+
+  datatable.renderDifficulty = difficulty => {
+    const estHashrate = difficulty * 0xffffffff / 600;
+
+    if (estHashrate < 1e12) {
+      return (estHashrate / 1e9).toFixed(2) + ' GH/s';
+    } else if (estHashrate < 1e15) {
+      return (estHashrate / 1e12).toFixed(2) + ' TH/s';
+    } else if (estHashrate < 1e18) {
+      return (estHashrate / 1e15).toFixed(2) + ' PH/s';
+    } else {
+      return (estHashrate / 1e18).toFixed(2) + ' EH/s';
+    }
+  };
+
+  datatable.renderTimestamp = timestamp => (
+    moment(timestamp * 1000).format('ll, LTS')
+  );
+
+  datatable.renderAddressTimestamp = timestamp => {
+    if (timestamp == 0) {
+      return '<div class="ui gray horizontal label">Mempool</div>';
+    }
+    return moment(timestamp * 1000).format('ll, LTS');
+  };
+
+
+  datatable.renderFee = (_value, _type, row) => {
+    if (row.isCoinbase) {
+      return '<div class="ui green horizontal label">Coinbase</div>';
+    }
+
+    const fee = renderInteger(row.satsInput - row.satsOutput);
+    const feePerByte = renderInteger(
+      Math.round(((row.satsInput - row.satsOutput) / row.size) * 1000)
+    );
+
+    let markup = '';
+    markup += `<span>${fee}</span>`
+    markup += `<span class="fee-per-byte">(${feePerByte} /kB)</span>`
+
+    return markup;
+  };
+
+  datatable.renderOutput = (_value, _type, row) => {
+    if (row.token) {
+      const ticker = `<a href="/tx/${row.token.tokenId}">${row.token.tokenTicker}</a>`;
+      return `${renderAmount(row.tokenOutput, row.token.decimals)} ${ticker}`;
+    }
+
+    return `${renderSats(row.satsOutput)} XEC`;
+  };
+
+  datatable.renderOutpoint = (_value, _type, row) => {
+    const { txHash, outIdx } = row;
+    const label = row.isCoinbase ? '<div class="ui green horizontal label">Coinbase</div>' : '';
+    return `<a href="/tx/${txHash}">${txHash}:${outIdx}${label}</a>`;
+  };
+
+  datatable.renderOutpointHeight = (_value, _type, row) => {
+    const { blockHeight } = row;
+    return `<a href="/block-height/${blockHeight}">${renderInteger(blockHeight)}</a>`;
+  };
+
+  datatable.renderBlockHeight = (_value, _type, row) => {
+    if (row.timestamp == 0) {
+      return '<div class="ui gray horizontal label">Mempool</div>';
+    }
+    return `<a href="/block-height/${row.blockHeight}">${renderInteger(row.blockHeight)}</a>`;
+  };
+
+  datatable.renderAmountXEC = sats => (
+    `${renderSats(sats)} XEC`
+  );
+
+  datatable.renderTokenAmountTicker = (_value, _type, row) => {
+    if (row.token !== null) {
+      const ticker = `<a href="/tx/${row.token.tokenId}">${row.token.tokenTicker}</a>`;
+      return `${renderAmount(row.tokenOutput, row.token.decimals)} ${ticker}`;
+    }
+
+    return '';
+  };
+
+  datatable.renderTokenAmount = (_value, _type, row) => (
+    renderAmount(row.tokenAmount, row.token.decimals)
+  );
+}(window.datatable = window.datatable || {}, jQuery));
 
 (function(state, $) {
   const DEFAULT_PAGE = 1;
@@ -131,26 +302,104 @@ const scrollToBottom = () => {
     return isNaN(parsedValue) ? fallback : Math.max(parsedValue, 1);
   };
 
+  const handleTabUpdate = params => {
+    if ((!params.page && !params.rows) || !params.currentTab) {
+      return params;
+    }
+
+    switch (params.currentTab) {
+      case 'transactions':
+        params.txp = validatePaginationInts(params.page, DEFAULT_PAGE);
+        params.txr = validatePaginationInts(params.rows, DEFAULT_ROWS_PER_PAGE);
+        break;
+
+      case 'ecash-outpoints':
+        params.ecop = validatePaginationInts(params.page, DEFAULT_PAGE);
+        params.ecor = validatePaginationInts(params.rows, DEFAULT_ROWS_PER_PAGE);
+        break;
+
+      case 'etoken-balances':
+        params.etbp = validatePaginationInts(params.page, DEFAULT_PAGE);
+        params.etbr = validatePaginationInts(params.rows, DEFAULT_ROWS_PER_PAGE);
+        break;
+
+      case 'etoken-outpoints':
+        params.etop = validatePaginationInts(params.page, DEFAULT_PAGE);
+        params.etor = validatePaginationInts(params.rows, DEFAULT_ROWS_PER_PAGE);
+        break;
+    }
+
+    delete params.page;
+    delete params.rows;
+
+    return params;
+  };
+
+  const handleTabGet = params => {
+    if (!params.currentTab) {
+      return params;
+    }
+
+    switch (params.currentTab) {
+      case 'transactions':
+        params.page = params.txp;
+        params.rows = params.txr;
+        break;
+
+      case 'ecash-outpoints':
+        params.page = params.ecop;
+        params.rows = params.ecor;
+        break;
+
+      case 'etoken-balances':
+        params.page = params.etbp;
+        params.rows = params.etbr;
+        break;
+
+      case 'etoken-balances':
+        params.page = params.etor;
+        params.rows = params.etop;
+        break;
+    }
+
+    params.page = validatePaginationInts(params.page, DEFAULT_PAGE)
+    params.rows = validatePaginationInts(params.rows, DEFAULT_ROWS_PER_PAGE)
+
+    return params;
+  };
+
   state.getPaginationTotalEntries = () => $('#pagination').data('total-entries');
 
   state.getParameters = () => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const page = validatePaginationInts(urlParams.get('page'), DEFAULT_PAGE) - 1;
-    const humanPage = page + 1;
-    const rows = validatePaginationInts(urlParams.get('rows'), DEFAULT_ROWS_PER_PAGE);
-    const order = urlParams.get('order') || DEFAULT_ORDER;
-    const start = parseInt(urlParams.get('start')) || 0;
-    const end = parseInt(urlParams.get('end')) || state.getPaginationTotalEntries();
+    let urlParams;
 
-    return { page, humanPage, rows, order, start, end };
+    urlParams = Object.fromEntries(new URLSearchParams(window.location.search).entries());
+    urlParams = handleTabGet(urlParams);
+
+    const page = validatePaginationInts(urlParams.page, DEFAULT_PAGE);
+    const rows = validatePaginationInts(urlParams.rows, DEFAULT_ROWS_PER_PAGE);
+    const order = urlParams.order || DEFAULT_ORDER;
+    const start = parseInt(urlParams.start) || 0;
+    const end = parseInt(urlParams.end) || state.getPaginationTotalEntries();
+
+    return { ...urlParams, page, rows, order, start, end };
   }
 
   state.updateParameters = params => {
+    let newParams;
+
     const path = window.location.pathname;
     const currentURLParams = Object.fromEntries(new URLSearchParams(window.location.search).entries());
-    const newURLParams = new URLSearchParams({ ...currentURLParams, ...params });
+    newParams = { ...currentURLParams, ...params }
 
+    if (newParams.currentTab) {
+      newParams = handleTabUpdate(newParams)
+    }
+
+    const newURLParams = new URLSearchParams(newParams);
     window.history.pushState('', document.title, `${path}?${newURLParams.toString()}`);
+
+    return Object.fromEntries(newURLParams.entries());
   }
 
   state.updateLoading = status => {
@@ -200,13 +449,22 @@ const scrollToBottom = () => {
     return Math.round((availableWidth) / predictedTier);
   };
 
-  pagination.generatePaginationRequestParams = () => {
+  pagination.generatePaginationRequestRange = () => {
     const { page, rows, start, end } = window.state.getParameters();
 
     const startPosition = end - (page * rows);
     const endPosition = Math.max(startPosition - rows, start);
 
     return [ startPosition, endPosition ];
+  };
+
+  pagination.generatePaginationRequestOffset = () => {
+    const { page, rows } = window.state.getParameters();
+
+    const offset = (page * rows) - rows;
+    const take = rows;
+
+    return { offset, take };
   };
 
   const generatePaginationArray = (currentPage, max, slots) => {
@@ -301,7 +559,7 @@ const scrollToBottom = () => {
   };
 
   pagination.generatePaginationUIParams = () => {
-    const { humanPage: currentPage, rows } = window.state.getParameters();
+    const { page: currentPage, rows } = window.state.getParameters();
     const totalEntries = window.state.getPaginationTotalEntries();
     const lastPage = Math.ceil(totalEntries / rows);
 

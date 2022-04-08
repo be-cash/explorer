@@ -67,7 +67,7 @@ h1, h2, h3, h4, h5 {
   z-index: 999;
 }
 
-.webix_dtable .hash {
+.hash {
   font-family: 'Ubuntu Mono';
 }
 
@@ -81,12 +81,12 @@ h1, h2, h3, h4, h5 {
   text-align: left;
 }
 
-#txs-table .webix_view,
-#block-txs .webix_view {
+#txs-table
+#block-txs {
   font-size: 13px !important;
 }
 
-#txs-table .fee .webix_cell {
+#txs-table .fee {
   overflow: visible;
 }
 
@@ -101,14 +101,6 @@ h1, h2, h3, h4, h5 {
 
 .zeros {
   opacity: 0.3; 
-}
-
-.webix_view {
-  font-family: inherit;
-}
-
-.webix_ss_header, .webix_ss_header > div, .webix_ss_header > div > div {
-  font-family: inherit !important;
 }
 
 .digit-sep {
@@ -218,10 +210,6 @@ h1, h2, h3, h4, h5 {
 
 #coins .token-table {
   padding-left: 65px;
-}
-
-#addr-txs #txs-table .webix_view, #addr-txs #txs-table .webix_hcell {
-  font-size: 12px !important;
 }
 
 #footer {
@@ -436,17 +424,29 @@ table.dataTable.no-footer {
 }
 
 #blocks-table_length,
+#address-txs-table_length,
+#outpoints-table_length,
+#address-token-balances-table_length,
+#address-token-outpoints-table_length,
 #txs-table_length {
   margin-bottom: 10px;
   float: right;
 }
 
 #blocks-table_paginate,
+#address-txs-table_paginate,
+#outpoints-table_paginate,
+#address-token-balances-table_paginate,
+#address-token-outpoints-table_paginate,
 #txs-table_paginate {
   display: none;
 }
 
 #blocks-table_info,
+#address-txs-table_info,
+#outpoints-table_info,
+#address-token-balances-table_info,
+#address-token-outpoints-table_info,
 #txs-table_info {
   display: none;
 }
@@ -467,17 +467,11 @@ table.dataTable.no-footer {
   z-index: 100;
 }
 
-.datatable__block_listing
-.webix_dtable,
-.webix_view {
+.datatable__block_listing {
   border: 0;
 }
 
-.datatable__block_listing
-.webix_ss_header,
-.webix_hs_center,
-.webix_hcolumn,
-.webix_hcell {
+.datatable__block_listing {
   background: transparent;
   border: 0;
   font-weight: 700;
@@ -499,6 +493,21 @@ table.dataTable.no-footer {
 .block__detail-table {
   width: 100%!important;
   padding: 0 6px 0 6px;
+}
+
+.address__menu-tabs {
+  margin-bottom: -33px!important;
+}
+
+.address__menu-tab {
+  background: transparent!important;
+  cursor: pointer;
+  z-index: 2;
+}
+
+.address__menu-tab.active {
+  border-radius: 0!important;
+  border-bottom: 3px solid #fb7b81!important;
 }
 
 .loader__container {

@@ -90,7 +90,7 @@
 
         {% when TxMetaVariant::InvalidSlp with { token_id, token_input } %}
           {% let ticker = token_meta.token_ticker|string_from_lossy_utf8 %}
-          <table class="ui very basic table">
+          <table class="tx-details-table ui very basic table">
             <tbody>
               <tr>
                 <td>Token Ticker</td>
@@ -115,7 +115,7 @@
       {#
       {% match variant %}
         {% when TxMetaVariant::InvalidSlp with { token_id, token_input } %}
-          <table class="ui very basic table">
+          <table class="tx-details-table ui very basic table">
             <tbody>
               <tr>
                 <td>Token Ticker</td>

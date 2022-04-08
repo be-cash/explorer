@@ -66,7 +66,7 @@ const datatable = () => {
       emptyTable: '',
     },
     ajax: `/api/block/${blockHash}/transactions`,
-    order: [ [ 1, 'desc' ] ],
+    order: [],
     responsive: {
         details: {
             type: 'column',

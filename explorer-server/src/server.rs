@@ -195,11 +195,19 @@ impl Server {
 
         let mut json_balances = utxos.into_iter().map(|(token_id, mut utxos)| {
             let (sats_amount, token_amount) = balances[&token_id];
+            let token: Option<JsonToken>;
+            if let Some(token_meta) = token_id.and_then(|token_id| self.indexer.db().token_meta(&token_id).ok()?) {
+                token = token_id.and_then(|token_id| Some(JsonToken::from_token_meta(&token_id, token_meta)))
+            } else {
+                token = None
+            }
+
             utxos.sort_by_key(|(_, utxo)| -utxo.block_height);
             (
                 utxos.get(0).map(|(_, utxo)| utxo.block_height).unwrap_or(0),
                 JsonBalance {
                     token_idx: token_id.and_then(|token_id| json_txs.token_indices.get(token_id.as_ref())).copied(),
+                    token: token,
                     sats_amount,
                     token_amount,
                     utxos: utxos.into_iter().map(|(utxo_key, utxo)| JsonUtxo {
@@ -421,6 +429,7 @@ impl Server {
                 utxos.get(0).map(|(_, utxo)| utxo.block_height).unwrap_or(0),
                 JsonBalance {
                     token_idx: token_id.and_then(|token_id| json_txs.token_indices.get(token_id.as_ref())).copied(),
+                    token: None,
                     sats_amount,
                     token_amount,
                     utxos: utxos.into_iter().map(|(utxo_key, utxo)| JsonUtxo {
@@ -436,18 +445,16 @@ impl Server {
         }).collect::<Vec<_>>();
         json_balances.sort_by_key(|(block_height, balance)| {
             if balance.token_idx.is_none() {
-                i32::MIN
+                i32::MAX
             } else {
                 -block_height
             }
         });
+        let (_, cash_balance) = json_balances.pop().unwrap();
         let json_balances: Vec<JsonBalance> = json_balances.into_iter().map(|(_, balance)| balance).collect::<Vec<_>>();
 
-        let encoded_txs = serde_json::to_string(&json_txs.txs)?.replace("'", r"\'");
-        let encoded_tokens = serde_json::to_string(&json_txs.tokens)?.replace("'", r"\'");
-        let encoded_balances = serde_json::to_string(&json_balances)?.replace("'", r"\'");
-
         let address_template = AddressTemplate {
+            cash_balance: cash_balance,
             json_balances: json_balances,
             token_dust: token_dust,
             address_num_txs: address_num_txs,
@@ -456,9 +463,6 @@ impl Server {
             sats_address: &sats_address,
             token_address: &token_address,
             legacy_address: legacy_address,
-            encoded_txs: encoded_txs,
-            encoded_tokens: encoded_tokens,
-            encoded_balances: encoded_balances,
         };
         Ok(warp::reply::html(address_template.render().unwrap()))
     }

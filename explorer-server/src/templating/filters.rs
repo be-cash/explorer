@@ -1,4 +1,3 @@
-use std::collections::BTreeSet;
 use chrono_humanize::HumanTime;
 use maud::{html, PreEscaped};
 use zerocopy::AsBytes;
@@ -11,7 +10,6 @@ use bitcoin_cash::Script;
 use crate::{
     grpc::bchrpc::{SlpToken, transaction::input::Outpoint},
     blockchain,
-    server_primitives::JsonToken,
     primitives::SlpAction,
 };
 
@@ -232,14 +230,6 @@ pub fn i64_to_u64(value: &i64) -> askama::Result<u64> {
 
 pub fn i32_to_u64(value: &i32) -> askama::Result<u64> {
     Ok(*value as u64)
-}
-
-pub fn usize_to_u64(value: &usize) -> askama::Result<u64> {
-    Ok(*value as u64)
-}
-
-pub fn get_token_by_idx<'a>(json_tokens: &'a Vec<JsonToken>, token_idx: &Option<usize>) -> askama::Result<Option<&'a JsonToken>> {
-    Ok(token_idx.and_then(|idx| json_tokens.get(idx)))
 }
 
 pub fn render_token_amount(base_amount: &u64, decimals: &u32) -> askama::Result<String> {

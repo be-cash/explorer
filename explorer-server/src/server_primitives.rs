@@ -19,6 +19,7 @@ pub struct JsonUtxo {
 #[serde(rename_all = "camelCase")]
 pub struct JsonBalance {
     pub token_idx: Option<usize>,
+    pub token: Option<JsonToken>,
     pub sats_amount: i64,
     pub token_amount: u64,
     pub utxos: Vec<JsonUtxo>,

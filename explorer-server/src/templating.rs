@@ -44,6 +44,7 @@ pub struct TransactionTemplate<'a> {
 #[derive(Template)]
 #[template(path = "pages/address.html")]
 pub struct AddressTemplate<'a> {
+    pub cash_balance: JsonBalance,
     pub json_balances: Vec<JsonBalance>,
     pub token_dust: i64,
     pub address_num_txs: usize,
@@ -52,7 +53,4 @@ pub struct AddressTemplate<'a> {
     pub sats_address: &'a Address<'a>,
     pub token_address: &'a Address<'a>,
     pub legacy_address: String,
-    pub encoded_txs: String,
-    pub encoded_tokens: String,
-    pub encoded_balances: String,
 }

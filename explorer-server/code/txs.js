@@ -1,35 +1,3 @@
-const renderHash = hash => '<a href="/tx/' + hash + '">' + hash + '</a>';
-const renderSize = size => formatByteSize(size);
-const renderFee = (_value, _type, row) => {
-  if (row.isCoinbase) {
-    return '<div class="ui green horizontal label">Coinbase</div>';
-  }
-
-  const fee = renderInteger(row.satsInput - row.satsOutput);
-  let markup = '';
-
-  markup += `<span>${fee}</span>`
-  markup += `<span class="fee-per-byte">(${renderFeePerByte(_value, _type, row)})</span>`
-
-  return markup;
-};
-const renderFeePerByte = (_value, _type, row) => {
-  if (row.isCoinbase) {
-    return '';
-  }
-  const fee = row.satsInput - row.satsOutput;
-  const feePerByte = fee / row.size;
-  return renderInteger(Math.round(feePerByte * 1000)) + '/kB';
-};
-const renderOutput = (satsOutput, _type, row) => {
-  if (row.token) {
-    var ticker = ' <a href="/tx/' + row.token.tokenId + '">' + row.token.tokenTicker + '</a>';
-    return renderAmount(row.tokenOutput, row.token.decimals) + ticker;
-  }
-  return renderSats(row.satsOutput) + ' XEC';
-};
-
-
 const updateLoading = (status) => {
   if (status) {
     $('#txs-table > tbody').addClass('blur');
@@ -57,34 +25,15 @@ const datatable = () => {
   const blockHash = $('#block-hash').text();
 
   $('#txs-table').DataTable({
-    searching: false,
-    lengthMenu: [50, 100, 250, 500, 1000],
-    pageLength: DEFAULT_ROWS_PER_PAGE,
-    language: {
-      loadingRecords: '',
-      zeroRecords: '',
-      emptyTable: '',
-    },
+    ...window.datatable.baseConfig,
     ajax: `/api/block/${blockHash}/transactions`,
-    order: [ [ 1, 'desc' ] ],
-    responsive: {
-        details: {
-            type: 'column',
-            target: -1
-        }
-    },
-    columnDefs: [ {
-        className: 'dtr-control',
-        orderable: false,
-        targets:   -1
-    } ],
     columns: [
-      { data: 'txHash', title: 'ID', className: 'hash', render: renderHash },
-      { data: 'size', title: 'Size', render: renderSize },
-      { name: 'fee', title: 'Fee [sats]', css: 'fee', render: renderFee },
+      { data: 'txHash', title: 'ID', className: 'hash', render: window.datatable.renderTxHash },
+      { data: 'size', title: 'Size', render: window.datatable.renderSize },
+      { name: 'fee', title: 'Fee [sats]', className: 'fee', render: window.datatable.renderFee },
       { data: 'numInputs', title: 'Inputs' },
       { data: 'numOutputs', title: 'Outputs' },
-      { data: 'satsOutput', title: 'Output Amount', render: renderOutput },
+      { data: 'satsOutput', title: 'Output Amount', render: window.datatable.renderOutput },
       { name: 'responsive', render: () => '' },
     ]
   });

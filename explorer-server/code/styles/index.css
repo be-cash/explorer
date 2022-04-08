@@ -438,6 +438,8 @@ table.dataTable.no-footer {
 #blocks-table_length,
 #address-txs-table_length,
 #outpoints-table_length,
+#address-token-balances-table_length,
+#address-token-outpoints-table_length,
 #txs-table_length {
   margin-bottom: 10px;
   float: right;
@@ -446,6 +448,8 @@ table.dataTable.no-footer {
 #blocks-table_paginate,
 #address-txs-table_paginate,
 #outpoints-table_paginate,
+#address-token-balances-table_paginate,
+#address-token-outpoints-table_paginate,
 #txs-table_paginate {
   display: none;
 }
@@ -453,6 +457,8 @@ table.dataTable.no-footer {
 #blocks-table_info,
 #address-txs-table_info,
 #outpoints-table_info,
+#address-token-balances-table_info,
+#address-token-outpoints-table_info,
 #txs-table_info {
   display: none;
 }

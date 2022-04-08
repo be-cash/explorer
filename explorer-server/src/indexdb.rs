@@ -374,9 +374,17 @@ impl IndexDb {
             Some(_) => return Ok(Some(format!("/tx/{}", query))),
             _ => {}
         }
-        match self.block_meta(&bytes) {
-            Ok(_) => return Ok(Some(format!("/block/{}", query))),
-            _ => {}
+        let block_height: u32 = query.parse().unwrap_or_default();
+        if block_height == 0 {
+            match self.block_meta(&bytes) {
+                Ok(_) => return Ok(Some(format!("/block/{}", query))),
+                _ => {}
+            }
+        } else {
+            match self.block_hash_at(block_height)? {
+                Some(_) => return Ok(Some(format!("/block-height/{}", block_height))),
+                _ => {}
+            }
         }
         Ok(None)
     }

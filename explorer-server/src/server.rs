@@ -232,6 +232,74 @@ impl Server {
         let json_response = JsonResponse { data: json_balances };
         Ok(serde_json::to_string(&json_response)?)
     }
+
+    pub async fn data_address_statistics(&self, address: &str) -> Result<impl Reply> {
+        #[derive(Serialize)]
+        #[serde(rename_all = "camelCase")]
+        struct JsonAddressStatistics {
+            total_txs: usize,
+            total_txs_received: usize,
+            total_txs_sent: usize,
+            total_utxos: usize,
+            first_balance_change: Option<i64>,
+            last_balance_change: Option<i64>,
+        }
+
+        #[derive(Serialize)]
+        #[serde(rename_all = "camelCase")]
+        struct JsonResponse {
+            data: JsonAddressStatistics,
+        }
+
+        let address = Address::from_cash_addr(address)?;
+        let sats_address = address.with_prefix(self.satoshi_addr_prefix);
+        let address_num_txs = self.indexer.db().address_num_txs(&sats_address)?;
+        let address_txs = self.indexer.db().address(&sats_address, 0, address_num_txs)?;
+        let balance = self.indexer.db().address_balance(&sats_address, 0, 0)?;
+
+        let mut total_txs_received: usize = 0;
+        let mut total_txs_sent: usize = 0;
+        let mut json_txs = self.json_txs(
+            address_txs
+                .iter()
+                .map(|(tx_hash, addr_tx, tx_meta)| {
+                    if addr_tx.delta_sats.is_positive() {
+                        total_txs_received += 1;
+                    } else {
+                        total_txs_sent += 1;
+                    }
+                    (tx_hash.as_ref(), addr_tx.timestamp, Some(addr_tx.block_height), tx_meta, (addr_tx.delta_sats, addr_tx.delta_tokens))
+                })
+        ).await?;
+        json_txs.txs.sort_by_key(|tx| tx.timestamp);
+
+
+        let first_balance_change: Option<i64>;
+        let last_balance_change: Option<i64>;
+
+        if let Some(tx) = json_txs.txs.last() {
+            first_balance_change = Some(tx.timestamp);
+        } else {
+            first_balance_change = None;
+        }
+
+        if let Some(tx) = json_txs.txs.last() {
+            last_balance_change = Some(tx.timestamp);
+        } else {
+            last_balance_change = None;
+        }
+
+        let json_address_statistics = JsonAddressStatistics { 
+            total_txs: address_num_txs,
+            total_txs_received: total_txs_received,
+            total_txs_sent: total_txs_sent,
+            total_utxos: balance.utxos.keys().len(),
+            first_balance_change: first_balance_change,
+            last_balance_change: last_balance_change,
+        };
+        let json_response = JsonResponse { data: json_address_statistics };
+        Ok(serde_json::to_string(&json_response)?)
+    }
 }
 
 impl Server {
@@ -450,16 +518,13 @@ impl Server {
                 -block_height
             }
         });
+
         let (_, cash_balance) = json_balances.pop().unwrap();
-        let json_balances: Vec<JsonBalance> = json_balances.into_iter().map(|(_, balance)| balance).collect::<Vec<_>>();
 
         let address_template = AddressTemplate {
             cash_balance: cash_balance,
-            json_balances: json_balances,
             token_dust: token_dust,
             address_num_txs: address_num_txs,
-            json_txs: json_txs,
-            address: &address,
             sats_address: &sats_address,
             token_address: &token_address,
             legacy_address: legacy_address,

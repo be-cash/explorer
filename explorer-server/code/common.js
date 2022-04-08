@@ -151,7 +151,7 @@ const scrollToBottom = () => {
     columnDefs: [ {
         className: 'dtr-control',
         orderable: false,
-        targets:   -1
+        targets: -1
     } ],
   };
 
@@ -405,12 +405,12 @@ const scrollToBottom = () => {
   state.updateLoading = status => {
     if (status) {
       $('.loader__container').removeClass('display-none');
-      $('#pagination').addClass('hidden');
-      $('#footer').addClass('hidden');
+      $('#pagination').addClass('visibility-hidden');
+      $('#footer').addClass('visibility-hidden');
     } else {
       $('.loader__container').addClass('display-none');
-      $('#pagination').removeClass('hidden');
-      $('#footer').removeClass('hidden');
+      $('#pagination').removeClass('visibility-hidden');
+      $('#footer').removeClass('visibility-hidden');
     }
   };
 }(window.state = window.state || {}, jQuery));

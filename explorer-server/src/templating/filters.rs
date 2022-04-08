@@ -169,7 +169,7 @@ pub fn render_integer_with_commas(int: &u64) -> askama::Result<String> {
             @if idx != 0 {
                 span.non-selectable { "," }
             }
-            span { (part) }
+            layflags-rolling-number { (part) }
         }
     };
 
@@ -190,8 +190,10 @@ pub fn render_sats(sats: &i64) -> askama::Result<String> {
         let _output = html! {
             (PreEscaped(render_integer_with_commas(&integer_part)?))
             "."
-            small {
-                (fract_part)
+            span.small {
+                layflags-rolling-number {
+                    (fract_part)
+                }
             }
         };
         output = _output.into_string();

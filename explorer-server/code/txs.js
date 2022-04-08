@@ -1,14 +1,14 @@
 const updateLoading = (status) => {
   if (status) {
     $('#txs-table > tbody').addClass('blur');
-    $('.loader__container--fullpage').removeClass('hidden');
-    $('#pagination').addClass('hidden');
-    $('#footer').addClass('hidden');
+    $('.loader__container--fullpage').removeClass('visibility-hidden');
+    $('#pagination').addClass('visibility-hidden');
+    $('#footer').addClass('visibility-hidden');
   } else {
     $('#txs-table > tbody').removeClass('blur');
-    $('.loader__container--fullpage').addClass('hidden');
-    $('#pagination').removeClass('hidden');
-    $('#footer').removeClass('hidden');
+    $('.loader__container--fullpage').addClass('visibility-hidden');
+    $('#pagination').removeClass('visibility-hidden');
+    $('#footer').removeClass('visibility-hidden');
   }
 };
 

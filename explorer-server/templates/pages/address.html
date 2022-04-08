@@ -1,88 +1,131 @@
 {% extends "base.html" %}
 
-{% block footer_classes %}hidden{% endblock %}
+{% block footer_classes %}visibility-hidden{% endblock %}
 
 {% block content %}
   <div class="ui container">
-    <tr>
-      <td colspan="20">
-        <div class="address-sats">
-          <div class="balance">
-            <h4>Balance</h4>
-            <h1>{{ cash_balance.sats_amount|render_sats|safe }} XEC</h1>
+    <div class="ui sixteen column grid">
+      <div class="row">
+        <div class="ten wide column">
+          <h4 class="address__balance-heading">Balance</h4>
+          <h1 class="address__balance-amount-primary">
+            <!-- <layflags-rolling-number> -->
+              {{ cash_balance.sats_amount|render_sats|safe }}
+            <!-- </layflags-rolling-number> XEC -->
+          </h1>
 
-            {% if token_dust > 0 %}
-              <h3>+{{ token_dust|render_sats|safe }} XEC in token dust</h3>
-            {% endif %}
-
-            {% match address_num_txs %}
-              {% when 1 %}
-                {{ address_num_txs }} Transaction
-              {% else %}
-                {{ address_num_txs }} Transactions
-            {% endmatch %}
-
-            <table class="addresses ui table very basic collapsing celled compact">
-              <tbody>
-                <tr>
-                  <td>Cash Address</td>
-                  <td>{{ sats_address.cash_addr() }}</td>
-                </tr>
-
-                <tr>
-                  <td>Token Address</td>
-                  <td>{{ token_address.cash_addr() }}</td>
-                </tr>
-
-                <tr>
-                  <td>Legacy Address</td>
-                  <td>{{ legacy_address }}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-
-          <div class="qr-code">
-            <img id="qr-code-img" src="/address-qr/{{ address.cash_addr() }}" />
-          </div>
-
-          {% if sats_address.cash_addr() == address.cash_addr() %}
-            <div class="qr-kind" id="selected-address-1">
+          {% if token_dust > 0 %}
+            <h3 class="address__balance-amount-secondary">+{{ token_dust|render_sats|safe }} XEC in token dust</h3>
           {% else %}
-            <div class="qr-kind" id="selected-address-2">
+            <div>
+              <i class="blue info circle icon"></i> Does not contain eTokens
+            </div>
           {% endif %}
-            <div class="address1">
-              <a onclick="$('#qr-code-img').attr('src', '/address-qr/{{ sats_address.cash_addr() }}'); $('.qr-kind').attr('id', 'selected-address-1')"}>
-                  XEC Address
-              </a>
-            </div>
+          <table id="address__selector" class="address__selector-table ui very basic selectable table">
+            <tbody>
+              <tr class="left marked" data-cube-side="1">
+                <td></td>
+                <td>Cash Address</td>
+                <td>{{ sats_address.cash_addr() }}</td>
+              </tr>
 
-            <div class="address2">
-              <a onclick="$('#qr-code-img').attr('src', '/address-qr/{{ token_address.cash_addr() }}'); $('.qr-kind').attr('id', 'selected-address-2')"}>
-                  eToken Address
-              </a>
-            </div>
+              <tr data-cube-side="2">
+                <td></td>
+                <td>Token Address</td>
+                <td>{{ token_address.cash_addr() }}</td>
+              </tr>
 
-            <div class="address3">
-              <a onclick="$('#qr-code-img').attr('src', '/address-qr/{{ legacy_address }}'); $('.qr-kind').attr('id', 'selected-address-3')"}>
-                  Legacy Address
-              </a>
+              <tr data-cube-side="3">
+                <td></td>
+                <td>Legacy Address</td>
+                <td>{{ legacy_address }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="right floated column" style="width: fit-content">
+          <div class="address__qr-code-wrapper ui cube shape" data-cube-active-side="1">
+            <div class="sides">
+              <div class="address__qr-code side active cash-address">
+                <div class="content">
+                  <div id="qr-cash-address" data-address="{{ sats_address.cash_addr() }}"></div>
+                </div>
+              </div>
+
+              <div class="address__qr-code side token-address">
+                <div class="content">
+                  <div id="qr-token-address" data-address="{{ token_address.cash_addr() }}"></div>
+                </div>
+              </div>
+
+              <div class="address__qr-code side legacy-address">
+                <div class="content">
+                  <div id="qr-legacy-address" data-address="{{ legacy_address }}"></div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
+      </div>
 
-        <div id="sats-coins" style="display: none;">
-          <div id="sats-coins-table"></div>
+      <h4 class="address__heading">Details</h4>
+      <div class="address__details row">
+        <div class="eight wide column">
+          <table class="address__details-table ui table very basic compact">
+            <tbody>
+              <tr>
+                <td>Transactions</td>
+                {% match address_num_txs %}
+                  {% when 1 %}
+                    <td>{{ address_num_txs }}</td>
+                  {% else %}
+                    <td>{{ address_num_txs }}</td>
+                {% endmatch %}
+              </tr>
+
+              <tr>
+                <td class="ten wide">Total Received</td>
+                <td class="six wide" id="address-total-received"><div class="ui active mini inline loader"></div></td>
+              </tr>
+
+              <tr>
+                <td class="ten wide">Total Sent</td>
+                <td class="six wide" id="address-total-sent"><div class="ui active mini inline loader"></div></td>
+              </tr>
+            </tbody>
+          </table>
         </div>
-      </td>
-    </tr>
+
+        <div class="eight wide column">
+          <table class="address__details-table ui table very basic compact">
+            <tbody>
+              <tr>
+                <td class="ten wide">Unspent Transaction Outputs</td>
+                <td id="address-total-utxos" class="six wide"><div class="ui active mini inline loader"></div></td>
+              </tr>
+
+              <tr>
+                <td class="ten wide">First balance change</td>
+                <td id="address-first-balance-change" class="six wide"><div class="ui active mini inline loader"></div></td>
+              </tr>
+
+              <tr>
+                <td class="ten wide">Last balance change</td>
+                <td id="address-last-balance-change" class="six wide"><div class="ui active mini inline loader"></div></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
 
     <div class="address__menu-tabs ui top basic secondary menu">
-      <div class="address__menu-tab item active" data-tab="transactions">Transactions</div>
-      <div class="address__menu-tab item" data-tab="ecash-outpoints">eCash Outpoints</div>
-      {% if !json_balances.is_empty() %}
-        <div class="address__menu-tab item" data-tab="etoken-balances">eToken Balances</div>
-        <div class="address__menu-tab item" data-tab="etoken-outpoints">eToken Outpoints</div>
+      <div class="address__menu-tab item active" data-tab="transactions"><h4>Transactions</h4></div>
+      <div class="address__menu-tab item" data-tab="ecash-outpoints"><h4>eCash Outpoints</h4></div>
+      {% if token_dust > 0 %}
+        <div class="address__menu-tab item" data-tab="etoken-balances"><h4>eToken Balances</h4></div>
+        <div class="address__menu-tab item" data-tab="etoken-outpoints"><h4>eToken Outpoints</h4></div>
       {% endif %}
     </div>
 
@@ -98,8 +141,7 @@
                 <th>Fee [sats]</th>
                 <th>Inputs</th>
                 <th>Outputs</th>
-                <th>Amount XEC</th>
-                <th>Amount Token</th>
+                <th>Amount</th>
                 <th></th>
             </tr>
         </thead>
@@ -123,7 +165,7 @@
       </table>
     </div>
 
-    {% if !json_balances.is_empty() %}
+    {% if token_dust > 0 %}
       <div class="ui bottom tab" data-tab="etoken-balances">
         <table id="address-token-balances-table" class="block-listing__datatable dataTable compact responsive nowrap no-footer" style="width: 100%">
           <thead>

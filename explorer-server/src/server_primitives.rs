@@ -1,8 +1,5 @@
-use maud::html;
 use serde::Serialize;
 use std::collections::HashMap;
-
-use crate::primitives::{SlpAction, TokenMeta};
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -18,9 +15,9 @@ pub struct JsonUtxo {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct JsonBalance {
-    pub token_idx: Option<usize>,
+    pub token_id: Option<String>,
     pub sats_amount: i64,
-    pub token_amount: u64,
+    pub token_amount: i128,
     pub utxos: Vec<JsonUtxo>,
 }
 
@@ -35,6 +32,17 @@ pub struct JsonToken {
     pub group_id: Option<String>,
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JsonBlock {
+    pub hash: String,
+    pub height: i32,
+    pub timestamp: i64,
+    pub difficulty: f64,
+    pub size: u64,
+    pub num_txs: u64,
+}
+
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct JsonTx {
@@ -45,16 +53,21 @@ pub struct JsonTx {
     pub size: i32,
     pub num_inputs: u32,
     pub num_outputs: u32,
+    pub stats: JsonTxStats,
+    pub token_id: Option<String>,
+    pub token: Option<JsonToken>,
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct JsonTxStats {
     pub sats_input: i64,
     pub sats_output: i64,
     pub delta_sats: i64,
     pub delta_tokens: i64,
-    pub token_idx: Option<usize>,
-    pub is_burned_slp: bool,
-    pub token_input: u64,
-    pub token_output: u64,
-    pub slp_action: Option<SlpAction>,
-    pub token: Option<JsonToken>,
+    pub token_input: i128,
+    pub token_output: i128,
+    pub does_burn_slp: bool,
 }
 
 #[derive(Serialize)]
@@ -65,17 +78,14 @@ pub struct JsonTxs {
     pub token_indices: HashMap<Vec<u8>, usize>,
 }
 
-impl JsonToken {
-    pub fn from_token_meta(token_id: &[u8], token_meta: TokenMeta) -> Self {
-        let token_ticker = String::from_utf8_lossy(&token_meta.token_ticker);
-        let token_name = String::from_utf8_lossy(&token_meta.token_name);
-        JsonToken {
-            token_id: hex::encode(token_id),
-            token_type: token_meta.token_type,
-            token_ticker: html! { (token_ticker) }.into_string(),
-            token_name: html! { (token_name) }.into_string(),
-            decimals: token_meta.decimals,
-            group_id: token_meta.group_id.map(|group_id| hex::encode(&group_id)),
-        }
-    }
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JsonBlocksResponse {
+    pub data: Vec<JsonBlock>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JsonTxsResponse {
+    pub data: Vec<JsonTx>,
 }

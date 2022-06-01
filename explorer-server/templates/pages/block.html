@@ -7,14 +7,14 @@
 
 {% block content %}
   <div class="ui container">
-    <h1>Block #{{ block_meta.height }}</h1>
+    <h1>Block #{{ block_info.height }}</h1>
 
     <div class="ui segment">
       <table class="top-section__hash-table ui very basic table">
         <tbody>
           <tr>
             <td class="no-padding"><strong>Hash</strong></td>
-            <td class="no-padding"><span id="block-hash" class="hex">{{ block_hash_string }}</span></td>
+            <td class="no-padding"><span id="block-hash" class="hex">{{ block_hex }}</span></td>
           </tr>
         </tbody>
       </table>
@@ -32,7 +32,7 @@
 
               <tr>
                 <td>Unix Timestamp</td>
-                <td>{{ block_meta.timestamp|i64_to_u64|render_integer|safe }}</td>
+                <td>{{ block_info.timestamp|to_i128|render_integer|safe }}</td>
               </tr>
 
               <tr>
@@ -50,7 +50,7 @@
             <tbody>
               <tr>
                 <td>Mined on</td>
-                <td class="moment__timestamp" data-timestamp="{{ block_meta.timestamp }}"></td>
+                <td class="moment__timestamp" data-timestamp="{{ block_info.timestamp }}"></td>
               </tr>
 
               <tr>
@@ -60,7 +60,7 @@
 
               <tr>
                 <td>Difficulty</td>
-                <td>{{ block_meta.difficulty|render_difficulty|safe }}</td>
+                <td>{{ difficulty|render_difficulty|safe }}</td>
               </tr>
             </tbody>
           </table>
@@ -73,17 +73,17 @@
             <tbody>
               <tr>
                 <td>Size</td>
-                <td>{{ block_meta.size|render_human_size }} ({{ block_meta.size|render_integer_smallify|safe }} B)</td>
+                <td>{{ block_info.block_size|render_human_size }} ({{ block_info.block_size|to_i128|render_integer_smallify|safe }} B)</td>
               </tr>
 
               <tr>
                 <td>Transactions</td>
-                <td>{{ block_meta.num_txs }}</td>
+                <td>{{ block_info.num_txs }}</td>
               </tr>
 
               <tr>
                 <td>Nonce</td>
-                <td>{{ block_meta.nonce }}</td>
+                <td>{{ block_details.nonce }}</td>
               </tr>
             </tbody>
           </table>
@@ -102,18 +102,18 @@
             <tr>
               <td>Header</td>
               <td>
-                <div class="hex">{{ block_header|hexify_block_header }}</div>
+                <div class="hex">{{ block_header|hexify_u8_vector }}</div>
               </td>
             </tr>
             <tr>
               <td>Coinbase data</td>
-              <td>{{ block_meta.coinbase_data|string_from_lossy_utf8 }}</td>
+              <td>{{ coinbase_data|string_from_lossy_utf8 }}</td>
             </tr>
 
             <tr>
               <td>Coinbase hex</td>
               <td>
-                <div class="hex">{{ block_meta.coinbase_data|hexify_u8_vector_bytes }}</div>
+                <div class="hex">{{ coinbase_data|hexify_u8_vector }}</div>
               </td>
             </tr>
           </tbody>
@@ -141,7 +141,7 @@
     </table>
 
     <div class="ui container">
-      <div id="pagination" class="bottom-pagination" data-total-entries="{{ block_meta.num_txs }}">
+      <div id="pagination" class="bottom-pagination" data-total-entries="{{ block_info.num_txs }}">
       </div>
       <div class="block-listing__fixed-nav-icon">
         <button class="circular ui icon button" onclick="scrollToBottom()">

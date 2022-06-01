@@ -1,11 +1,12 @@
 const renderHash = hash => '<a href="/tx/' + hash + '">' + hash + '</a>';
 const renderSize = size => formatByteSize(size);
 const renderFee = (_value, _type, row) => {
+  console.log(row)
   if (row.isCoinbase) {
     return '<div class="ui green horizontal label">Coinbase</div>';
   }
 
-  const fee = renderInteger(row.satsInput - row.satsOutput);
+  const fee = renderInteger(row.stats.satsInput - row.stats.satsOutput);
   let markup = '';
 
   markup += `<span>${fee}</span>`
@@ -17,16 +18,16 @@ const renderFeePerByte = (_value, _type, row) => {
   if (row.isCoinbase) {
     return '';
   }
-  const fee = row.satsInput - row.satsOutput;
+  const fee = row.stats.satsInput - row.stats.satsOutput;
   const feePerByte = fee / row.size;
   return renderInteger(Math.round(feePerByte * 1000)) + '/kB';
 };
 const renderOutput = (satsOutput, _type, row) => {
   if (row.token) {
     var ticker = ' <a href="/tx/' + row.token.tokenId + '">' + row.token.tokenTicker + '</a>';
-    return renderAmount(row.tokenOutput, row.token.decimals) + ticker;
+    return renderAmount(row.stats.tokenOutput, row.token.decimals) + ticker;
   }
-  return renderSats(row.satsOutput) + ' XEC';
+  return renderSats(row.stats.satsOutput) + ' XEC';
 };
 
 

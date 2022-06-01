@@ -209,13 +209,9 @@ const scrollToBottom = () => {
     return [ startPosition, endPosition ];
   };
 
-  pagination.generatePaginationRequestOffset = () => {
-    const { humanPage, rows } = window.state.getParameters();
-
-    const offset = (humanPage * rows) - rows;
-    const take = rows;
-
-    return { offset, take };
+  pagination.generatePaginationRequest = () => {
+    const { page, rows } = window.state.getParameters();
+    return { page, take: rows };
   };
 
   const generatePaginationArray = (currentPage, max, slots) => {

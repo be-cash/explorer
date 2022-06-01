@@ -1,15 +1,17 @@
-use chrono::{DateTime, Utc};
 use askama::Template;
-use bitcoin_cash::Address;
+use bitcoinsuite_chronik_client::proto::{
+    BlockDetails, BlockInfo, SlpTokenType, SlpTxType, Token, Tx, Utxo, SlpGenesisInfo, SlpMeta,
+};
+use chrono::{DateTime, Utc};
+use std::collections::HashMap;
 
-use crate::{blockchain::{BlockHeader, Destination}, primitives::{BlockMeta, TxMetaVariant}, indexer::Tx, server_primitives::{JsonBalance, JsonTxs}};
+use crate::{blockchain::Destination, server_primitives::JsonBalance};
 
 mod filters;
 
 #[derive(Template)]
 #[template(path = "pages/homepage.html")]
-pub struct HomepageTemplate {
-}
+pub struct HomepageTemplate {}
 
 #[derive(Template)]
 #[template(path = "pages/blocks.html")]
@@ -20,11 +22,14 @@ pub struct BlocksTemplate {
 #[derive(Template)]
 #[template(path = "pages/block.html")]
 pub struct BlockTemplate<'a> {
-    pub block_hash_string: &'a str,
-    pub block_header: BlockHeader,
-    pub block_meta: BlockMeta,
-    pub confirmations: u32,
+    pub block_hex: &'a str,
+    pub block_header: Vec<u8>,
+    pub block_info: BlockInfo,
+    pub block_details: BlockDetails,
+    pub confirmations: i32,
     pub timestamp: DateTime<chrono::Utc>,
+    pub difficulty: f64,
+    pub coinbase_data: Vec<u8>,
 }
 
 #[derive(Template)]
@@ -33,26 +38,33 @@ pub struct TransactionTemplate<'a> {
     pub title: &'a str,
     pub token_section_title: &'a str,
     pub is_token: bool,
-    pub tx_hash_string: &'a str,
-    pub token_hash_string: Option<String>,
+    pub tx_hex: &'a str,
+    pub token_hex: Option<String>,
     pub tx: Tx,
-    pub block_meta: Option<BlockMeta>,
-    pub confirmations: u32,
+    pub slp_genesis_info: Option<SlpGenesisInfo>,
+    pub slp_meta: Option<SlpMeta>,
+    pub raw_tx: String,
+    pub confirmations: i32,
     pub timestamp: DateTime<Utc>,
+    pub sats_input: i64,
+    pub sats_output: i64,
+    pub token_input: i128,
+    pub token_output: i128,
 }
 
 #[derive(Template)]
 #[template(path = "pages/address.html")]
 pub struct AddressTemplate<'a> {
-    pub json_balances: Vec<JsonBalance>,
+    pub tokens: HashMap<String, Token>,
     pub token_dust: i64,
-    pub address_num_txs: usize,
-    pub json_txs: JsonTxs,
-    pub address: &'a Address<'a>,
-    pub sats_address: &'a Address<'a>,
-    pub token_address: &'a Address<'a>,
+    pub total_xec: i64,
+    pub token_utxos: Vec<Utxo>,
+    pub address_num_txs: u32,
+    pub address: &'a str,
+    pub sats_address: &'a str,
+    pub token_address: &'a str,
     pub legacy_address: String,
-    pub encoded_txs: String,
+    pub json_balances: HashMap<String, JsonBalance>,
     pub encoded_tokens: String,
     pub encoded_balances: String,
 }

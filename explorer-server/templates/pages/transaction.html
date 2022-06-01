@@ -11,7 +11,7 @@
     <div class="ui grid">
       <div class="tx-header__container ten wide column">
         <h1 class="tx-header__title">{{ title }}</h1>
-        {% if tx.tx_meta.is_coinbase %}
+        {% if tx.is_coinbase %}
           <div class="tx-header__label ui green label">Coinbase</div>
         {% endif %}
       </div>
@@ -32,14 +32,14 @@
           {% if is_token %}
             <tr>
               <td><strong>Transaction ID</strong></td>
-              <td><span class="hex">{{ tx_hash_string }}</span></td>
+              <td><span class="hex">{{ tx_hex }}</span></td>
             </tr>
             <tr>
               <td><strong>Token ID</strong></td>
               <td>
-                {% match token_hash_string %}
-                  {% when Some with (token_hash) %}
-                    <span class="hex">{{ token_hash }}</span>
+                {% match token_hex %}
+                  {% when Some with (token_hex) %}
+                    <span class="hex">{{ token_hex }}</span>
                   {% when None %}
                 {% endmatch %}
               </td>
@@ -47,7 +47,7 @@
           {% else %}
             <tr>
               <td class="no-padding"><strong>Transaction ID</strong></td>
-              <td class="no-padding"><span class="hex">{{ tx_hash_string }}</span></td>
+              <td class="no-padding"><span class="hex">{{ tx_hex }}</span></td>
             </tr>
           {% endif %}
         </tbody>
@@ -56,7 +56,7 @@
 
     <div id="raw-hex" class="ui segment" style="display: none;">
       <h4>Raw Transaction Hex</h4>
-      <div class="hex">{{ tx.raw_tx|hexify_u8_vector }}</div>
+      <div class="hex">{{ raw_tx }}</div>
     </div>
 
     <h2>General Details</h2>
@@ -71,12 +71,12 @@
           <tr>
             <td>Block</td>
             <td>
-              {% match block_meta %}
-                {% when Some with (_) %}
-                  <a href="/block/{{ tx.transaction.block_hash|to_le_hex }}">
-                    {{ tx.transaction.block_height|i32_to_u64|render_integer|safe }}
+              {% match tx.block %}
+                {% when Some with (block_meta) %}
+                  <a href="/block/{{ block_meta.hash|to_le_hex }}">
+                    {{ block_meta.height|to_i128|render_integer|safe }}
                   </a>
-                  ({{ confirmations|u32_to_u64|render_integer|safe }}  confirmations)
+                  ({{ confirmations|to_i128|render_integer|safe }}  confirmations)
                 {% when None %}
                   Not mined yet
               {% endmatch %}
@@ -86,9 +86,9 @@
           <tr>
             <td>Unix Timestamp</td>
             <td>
-              {% match block_meta %}
+              {% match tx.block %}
                 {% when Some with (block_meta) %}
-                  {{ block_meta.timestamp|i64_to_u64|render_integer|safe }}
+                  {{ block_meta.timestamp|to_i128|render_integer|safe }}
                 {% when None %}
                   Not mined yet
               {% endmatch %}
@@ -97,12 +97,12 @@
 
           <tr>
             <td>Size</td>
-            <td>{{ tx.transaction.size|i32_to_u64|render_human_size }} ({{ tx.transaction.size|i32_to_u64|render_integer_smallify|safe }} B)</td>
+            <td>{{ tx.size|u32_to_u64|render_human_size }} ({{ tx.size|to_i128|render_integer_smallify|safe }} B)</td>
           </tr>
 
           <tr>
             <td>Locktime</td>
-            <td>{{ tx.transaction.lock_time|u32_to_u64|render_integer|safe }}</td>
+            <td>{{ tx.lock_time|to_i128|render_integer|safe }}</td>
           </tr>
         </tbody>
       </table>
@@ -113,7 +113,7 @@
         <tbody>
           <tr>
             <td>Mined on</td>
-            {% match block_meta %}
+            {% match tx.block %}
               {% when Some with (block_meta) %}
                 <td class="moment__timestamp" data-timestamp="{{ block_meta.timestamp }}"></td>
               {% when None %}
@@ -123,22 +123,22 @@
 
           <tr>
             <td>Total Input</td>
-            <td>{{ tx.tx_meta.sats_input|render_sats|safe }} XEC</td>
+            <td>{{ sats_input|render_sats|safe }} XEC</td>
           </tr>
 
           <tr>
             <td>Total Output</td>
-            <td>{{ tx.tx_meta.sats_output|render_sats|safe }} XEC</td>
+            <td>{{ sats_output|render_sats|safe }} XEC</td>
           </tr>
 
           <tr>
             <td>Fee</td>
-            <td>{{ (tx.tx_meta.sats_input - tx.tx_meta.sats_output)|max(0)|render_sats|safe }} XEC</td>
+            <td>{{ (sats_input - sats_output)|max(0)|render_sats|safe }} XEC</td>
           </tr>
 
           <tr>
             <td>Version</td>
-            <td>{{ tx.transaction.version }}</td>
+            <td>{{ tx.version }}</td>
           </tr>
         </tbody>
       </table>
@@ -147,7 +147,7 @@
     {% if is_token %}
       <h2>{{ token_section_title }}</h2>
       <div class="ui grid segment tx-details">
-        {% call token_info_table::render(tx.tx_meta.variant, tx.token_meta) %}
+        {% call token_info_table::render(tx, slp_genesis_info, slp_meta, token_input, token_output) %}
       </div>
     {% endif %}
 
@@ -168,11 +168,11 @@
 
     <div class="ui grid segment">
       <div class="tx-transaction__inputs">
-        <h4>Inputs ({{ tx.transaction.inputs.len() }})</h4>
+        <h4>Inputs ({{ tx.inputs.len() }})</h4>
         <table id="inputs" class="ui very basic table">
           <tbody>
-            {% for input in tx.transaction.inputs %}
-              {% call input::render(input, tx.token_meta) %}
+            {% for input in tx.inputs %}
+              {% call input::render(loop.index0, input, tx) %}
             {% endfor %}
           </tbody>
         </table>
@@ -185,12 +185,12 @@
       </div>
 
       <div class="tx-transaction__outputs">
-        <h4>Outputs ({{ tx.transaction.outputs.len() }})</h4>
+        <h4>Outputs ({{ tx.outputs.len() }})</h4>
 
         <table id="outputs" class="ui very basic table">
           <tbody>
-            {% for output in tx.transaction.outputs %}
-              {% call output::render(output, tx.token_meta, tx.tx_out_spends) %}
+            {% for output in tx.outputs %}
+              {% call output::render(loop.index0, output, tx) %}
             {% endfor %}
           </tbody>
         </table>

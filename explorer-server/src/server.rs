@@ -1,32 +1,40 @@
-use anyhow::{Result, anyhow, bail};
-use bitcoin_cash::Address;
-use maud::html;
-use warp::{Reply, http::Uri};
-use serde::Serialize;
-use chrono::{Utc, TimeZone};
-use std::{borrow::Cow, collections::{HashMap, hash_map::Entry}, convert::{TryInto, TryFrom}, sync::Arc};
-use zerocopy::byteorder::{I32, U32};
 use askama::Template;
+use bitcoinsuite_chronik_client::proto::{SlpTokenType, SlpTxType, Token, Utxo};
+use bitcoinsuite_chronik_client::{proto::OutPoint, ChronikClient};
+use bitcoinsuite_core::{CashAddress, Hashed, Sha256d};
+use bitcoinsuite_error::Result;
+use chrono::{TimeZone, Utc};
+use eyre::{bail, eyre};
+use futures::future;
+use maud::html;
+use std::{
+    borrow::Cow,
+    collections::{hash_map::Entry, HashMap, HashSet},
+};
+use warp::{http::Uri, Reply};
 
 use crate::{
-    blockchain::{BlockHeader, from_le_hex, to_legacy_address, to_le_hex},
-    indexdb::AddressBalance,
-    indexer::Indexer,
-    primitives::{SlpAction, TxMeta, TxMetaVariant},
-    server_primitives::{JsonUtxo, JsonBalance, JsonToken, JsonTx, JsonTxs },
-    templating::{HomepageTemplate, BlocksTemplate, BlockTemplate, TransactionTemplate, AddressTemplate},
+    api::{block_txs_to_json, calc_tx_stats, tokens_to_json, tx_history_to_json},
+    blockchain::{
+        calculate_block_difficulty, cash_addr_to_script_type_payload, from_be_hex, to_be_hex,
+        to_legacy_address,
+    },
+    server_primitives::{JsonBalance, JsonBlock, JsonBlocksResponse, JsonTxsResponse, JsonUtxo},
+    templating::{
+        AddressTemplate, BlockTemplate, BlocksTemplate, HomepageTemplate, TransactionTemplate,
+    },
 };
 
 pub struct Server {
-    indexer: Arc<dyn Indexer>,
+    chronik: ChronikClient,
     satoshi_addr_prefix: &'static str,
     tokens_addr_prefix: &'static str,
 }
 
 impl Server {
-    pub async fn setup(indexer: Arc<dyn Indexer>) -> Result<Self> {
+    pub async fn setup(chronik: ChronikClient) -> Result<Self> {
         Ok(Server {
-            indexer,
+            chronik,
             satoshi_addr_prefix: "ecash",
             tokens_addr_prefix: "etoken",
         })
@@ -35,367 +43,366 @@ impl Server {
 
 impl Server {
     pub async fn homepage(&self) -> Result<impl Reply> {
-        let homepage = HomepageTemplate {  };
+        let homepage = HomepageTemplate {};
         Ok(warp::reply::html(homepage.render().unwrap()))
     }
 
     pub async fn blocks(&self) -> Result<impl Reply> {
-        let last_block_height = self.indexer.db().last_block_height()?;
+        let blockchain_info = self.chronik.blockchain_info().await?;
 
         let blocks_template = BlocksTemplate {
-            last_block_height: last_block_height,
+            last_block_height: blockchain_info.tip_height as u32,
         };
+
         Ok(warp::reply::html(blocks_template.render().unwrap()))
     }
 }
 
 impl Server {
-    pub async fn data_blocks(&self, start_height: u32, end_height: u32) -> Result<impl Reply> {
-        let num_blocks = end_height.checked_sub(start_height).unwrap() + 1;
-        let blocks = self.indexer.db().block_range(start_height, num_blocks)?;
-        #[derive(Serialize)]
-        #[serde(rename_all = "camelCase")]
-        struct Block {
-            hash: String,
-            height: i32,
-
-            version: i32,
-            timestamp: i64,
-
-            difficulty: f64,
-            size: u64,
-            num_txs: u64,
-            median_time: i64,
-        }
-        #[derive(Serialize)]
-        #[serde(rename_all = "camelCase")]
-        struct JsonResponse {
-            data: Vec<Block>,
-        }
+    pub async fn data_blocks(&self, start_height: i32, end_height: i32) -> Result<impl Reply> {
+        let blocks = self.chronik.blocks(start_height, end_height).await?;
 
         let mut json_blocks = Vec::with_capacity(blocks.len());
-        for (block_hash, block) in blocks.into_iter().rev() {
-            json_blocks.push(Block {
-                hash: to_le_hex(&block_hash),
+        for block in blocks.into_iter().rev() {
+            json_blocks.push(JsonBlock {
+                hash: to_be_hex(&block.hash),
                 height: block.height,
-                version: block.version,
                 timestamp: block.timestamp,
-                difficulty: block.difficulty,
-                size: block.size,
-                median_time: block.median_time,
+                difficulty: calculate_block_difficulty(block.n_bits),
+                size: block.block_size,
                 num_txs: block.num_txs,
             });
         }
 
-        let json_response = JsonResponse { data: json_blocks };
-        Ok(serde_json::to_string(&json_response)?)
+        Ok(serde_json::to_string(&JsonBlocksResponse {
+            data: json_blocks,
+        })?)
     }
 
-    pub async fn data_block_txs(&self, block_hash: &str) -> Result<impl Reply> {
-        #[derive(Serialize)]
-        #[serde(rename_all = "camelCase")]
-        struct JsonResponse {
-            data: Vec<JsonTx>,
-        }
+    pub async fn data_block_txs(&self, block_hex: &str) -> Result<impl Reply> {
+        let block_hash = Sha256d::from_hex_be(block_hex)?;
+        let block = self.chronik.block_by_hash(&block_hash).await?;
 
-        let block_hash = from_le_hex(block_hash)?;
-        let block_txs = self.indexer.block_txs(&block_hash).await?;
-        let json_txs = self.json_txs(
-            block_txs.iter()
-                .map(|(tx_hash, tx_meta)| (tx_hash.as_ref(), 0, Some(tx_meta.block_height), tx_meta, (0, 0)))
-        ).await?;
+        let token_ids = block
+            .txs
+            .iter()
+            .filter_map(|tx| {
+                let slp_tx_data = tx.slp_tx_data.as_ref()?;
+                let slp_meta = slp_tx_data.slp_meta.as_ref()?;
+                Some(Sha256d::from_slice_be(&slp_meta.token_id).expect("Impossible"))
+            })
+            .collect::<HashSet<_>>();
 
-        let mut txs = Vec::with_capacity(json_txs.txs.len());
-        for transaction in json_txs.txs.iter() {
-            let mut tx: JsonTx = transaction.clone();
+        let tokens_by_hex = self.batch_get_chronik_tokens(token_ids).await?;
+        let json_txs = block_txs_to_json(block, &tokens_by_hex)?;
 
-            match tx.token_idx {
-                Some(token_idx) => {
-                    tx.token = Some(json_txs.tokens[token_idx].clone());
-                },
-                None => ()
-            }
-
-            txs.push(tx);
-        }
-
-        let json_response = JsonResponse { data: txs };
-        Ok(serde_json::to_string(&json_response)?)
+        Ok(serde_json::to_string(&JsonTxsResponse { data: json_txs })?)
     }
 
-    pub async fn data_address_txs(&self, address: &str, query: HashMap<String, String>) -> Result<impl Reply> {
-        #[derive(Serialize)]
-        #[serde(rename_all = "camelCase")]
-        struct JsonResponse {
-            data: Vec<JsonTx>,
-        }
+    pub async fn data_address_txs(
+        &self,
+        address: &str,
+        query: HashMap<String, String>,
+    ) -> Result<impl Reply> {
+        let address = CashAddress::parse_cow(address.into())?;
+        let (script_type, script_payload) = cash_addr_to_script_type_payload(&address);
+        let script_endpoint = self.chronik.script(script_type, &script_payload);
 
-        let offset: usize = query.get("offset").map(|s| s.as_str()).unwrap_or("0").parse()?;
-        let take: usize = query.get("take").map(|s| s.as_str()).unwrap_or("100").parse()?;
+        let page: usize = query
+            .get("page")
+            .map(|s| s.as_str())
+            .unwrap_or("0")
+            .parse()?;
+        let take: usize = query
+            .get("take")
+            .map(|s| s.as_str())
+            .unwrap_or("200")
+            .parse()?;
+        let address_tx_history = script_endpoint.history_with_page_size(page, take).await?;
 
-        let address = Address::from_cash_addr(address)?;
-        let sats_address = address.with_prefix(self.satoshi_addr_prefix);
-        let address_txs = self.indexer.db().address(&sats_address, offset, take)?;
-        let mut json_txs = self.json_txs(
-            address_txs
-                .iter()
-                .map(|(tx_hash, addr_tx, tx_meta)| {
-                    (tx_hash.as_ref(), addr_tx.timestamp, Some(addr_tx.block_height), tx_meta, (addr_tx.delta_sats, addr_tx.delta_tokens))
-                })
-        ).await?;
-        let balance = self.indexer.db().address_balance(&sats_address, offset, take)?;
-        let AddressBalance { utxos, .. } = balance;
-        for (token_id, _) in &utxos {
-            if let Some(token_id) = &token_id {
-                if !json_txs.token_indices.contains_key(token_id.as_ref()) {
-                    if let Some(token_meta) = self.indexer.db().token_meta(token_id)? {
-                        json_txs.token_indices.insert(token_id.to_vec(), json_txs.tokens.len());
-                        json_txs.tokens.push(JsonToken::from_token_meta(token_id, token_meta));
-                    }
-                }
-            }
-        }
+        let token_ids = address_tx_history
+            .txs
+            .iter()
+            .filter_map(|tx| {
+                let slp_tx_data = tx.slp_tx_data.as_ref()?;
+                let slp_meta = slp_tx_data.slp_meta.as_ref()?;
+                Some(Sha256d::from_slice_be_or_null(&slp_meta.token_id))
+            })
+            .collect();
 
-        let json_response = JsonResponse { data: json_txs.txs };
-        Ok(serde_json::to_string(&json_response)?)
+        let tokens = self.batch_get_chronik_tokens(token_ids).await?;
+        let json_tokens = tokens_to_json(&tokens)?;
+        let json_txs = tx_history_to_json(&address, address_tx_history, &json_tokens)?;
+
+        Ok(serde_json::to_string(&JsonTxsResponse { data: json_txs })?)
     }
 }
 
 impl Server {
-    async fn json_txs(&self, txs: impl ExactSizeIterator<Item=(&[u8], i64, Option<i32>, &TxMeta, (i64, i64))>) -> Result<JsonTxs> {
-        let mut json_txs = Vec::with_capacity(txs.len());
-        let mut token_indices = HashMap::<Vec<u8>, usize>::new();
-        for (tx_hash, timestamp, block_height, tx_meta, (delta_sats, delta_tokens)) in txs {
-            let mut tx = JsonTx {
-                tx_hash: to_le_hex(&tx_hash),
-                block_height,
-                timestamp,
-                is_coinbase: tx_meta.is_coinbase,
-                size: tx_meta.size,
-                num_inputs: tx_meta.num_inputs,
-                num_outputs: tx_meta.num_outputs,
-                sats_input: tx_meta.sats_input,
-                sats_output: tx_meta.sats_output,
-                delta_sats,
-                delta_tokens,
-                token_idx: None,
-                is_burned_slp: false,
-                token_input: 0,
-                token_output: 0,
-                slp_action: None,
-                token: None,
-            };
-            let mut tx_token_id = None;
-            match &tx_meta.variant {
-                TxMetaVariant::SatsOnly => {},
-                TxMetaVariant::InvalidSlp { token_id, token_input } => {
-                    tx_token_id = Some(token_id.clone());
-                    tx.is_burned_slp = true;
-                    tx.token_input = *token_input;
-                }
-                TxMetaVariant::Slp { token_id, token_input, token_output, action } => {
-                    tx_token_id = Some(token_id.to_vec());
-                    tx.token_input = *token_input;
-                    tx.token_output = *token_output;
-                    tx.slp_action = Some(*action);
-                }
-            }
-            if let Some(token_id) = tx_token_id {
-                if token_id.len() == 32 {
-                    let num_tokens = token_indices.len();
-                    match token_indices.entry(token_id) {
-                        Entry::Vacant(vacant) => {
-                            vacant.insert(num_tokens);
-                            tx.token_idx = Some(num_tokens);
-                        },
-                        Entry::Occupied(occupied) => {
-                            tx.token_idx = Some(*occupied.get());
-                        }
-                    }
-                }
-            }
-            json_txs.push(tx);
-        }
-        let tokens = token_indices
-            .keys()
-            .map(|key| self.indexer.db().token_meta(key))
-            .collect::<Result<Vec<_>, _>>()?;
-        let mut token_data = tokens.into_iter().zip(&token_indices).collect::<Vec<_>>();
-        token_data.sort_unstable_by_key(|&(_, (_, idx))| idx);
-        let json_tokens = token_data.into_iter().filter_map(|(token_meta, (token_id, _))| {
-            Some(JsonToken::from_token_meta(token_id, token_meta?))
-        }).collect::<Vec<_>>();
-        Ok(JsonTxs { tokens: json_tokens, txs: json_txs, token_indices })
-    }
+    pub async fn block(&self, block_hex: &str) -> Result<impl Reply> {
+        let block_hash = Sha256d::from_hex_be(block_hex)?;
 
-    pub async fn block(&self, block_hash_str: &str) -> Result<impl Reply> {
-        let block_hash = from_le_hex(block_hash_str)?;
-        let block_meta = self.indexer.db().block_meta(&block_hash)?.ok_or_else(|| anyhow!("No such block"))?;
-        let best_height = self.indexer.db().last_block_height()?;
-        let confirmations = best_height - block_meta.height as u32 + 1;
-        let timestamp = Utc.timestamp(block_meta.timestamp, 0);
-        let mut block_header = BlockHeader::default();
-        block_header.version = I32::new(block_meta.version);
-        block_header.previous_block = block_meta.previous_block;
-        block_header.merkle_root = block_meta.merkle_root;
-        block_header.timestamp = U32::new(block_meta.timestamp.try_into()?);
-        block_header.bits = U32::new(block_meta.bits);
-        block_header.nonce = U32::new(block_meta.nonce);
+        let block = self.chronik.block_by_hash(&block_hash).await?;
+        let block_info = block.block_info.ok_or_else(|| eyre!("Block has no info"))?;
+        let block_details = block
+            .block_details
+            .ok_or_else(|| eyre!("Block has details"))?;
+
+        let blockchain_info = self.chronik.blockchain_info().await?;
+        let best_height = blockchain_info.tip_height;
+
+        let difficulty = calculate_block_difficulty(block_info.n_bits);
+        let timestamp = Utc.timestamp(block_info.timestamp, 0);
+        let coinbase_data = block.txs[0].inputs[0].input_script.clone();
+        let confirmations = best_height - block_info.height + 1;
 
         let block_template = BlockTemplate {
-            block_hash_string: block_hash_str,
-            block_header: block_header,
-            block_meta: block_meta,
-            confirmations: confirmations,
-            timestamp: timestamp,
+            block_hex,
+            block_header: block.raw_header,
+            block_info,
+            block_details,
+            confirmations,
+            timestamp,
+            difficulty,
+            coinbase_data,
         };
-        
+
         Ok(warp::reply::html(block_template.render().unwrap()))
     }
 
-    pub async fn tx(&self, tx_hash_str: &str) -> Result<impl Reply> {
-        use SlpAction::*;
-
-        let tx_hash = from_le_hex(tx_hash_str)?;
-        let tx = self.indexer.tx(&tx_hash).await?;
-        let title: Cow<str> = match tx.tx_meta.variant {
-            TxMetaVariant::SatsOnly => "eCash Transaction".into(),
-            TxMetaVariant::InvalidSlp {..} => "Invalid eToken Transaction".into(),
-            TxMetaVariant::Slp {..} => {
-                let token_meta = tx.token_meta.as_ref().ok_or_else(|| anyhow!("No token meta"))?;
-                format!("{} Token Transaction", String::from_utf8_lossy(&token_meta.token_ticker)).into()
+    pub async fn tx(&self, tx_hex: &str) -> Result<impl Reply> {
+        let tx_hash = Sha256d::from_hex_be(tx_hex)?;
+        let tx = self.chronik.tx(&tx_hash).await?;
+        let token_id = match &tx.slp_tx_data {
+            Some(slp_tx_data) => {
+                let slp_meta = slp_tx_data.slp_meta.as_ref().expect("Impossible");
+                Some(Sha256d::from_slice_be(&slp_meta.token_id)?)
+            }
+            None => None,
+        };
+        let token = match &token_id {
+            Some(token_id) => Some(self.chronik.token(token_id).await?),
+            None => None,
+        };
+        let token_ticker = token.as_ref().and_then(|token| {
+            Some(String::from_utf8_lossy(
+                &token
+                    .slp_tx_data
+                    .as_ref()?
+                    .genesis_info
+                    .as_ref()?
+                    .token_ticker,
+            ))
+        });
+        let (title, is_token): (Cow<str>, bool) = match &token_ticker {
+            Some(token_ticker) => (format!("{} Transaction", token_ticker).into(), true),
+            None => {
+                if tx.slp_error_msg.is_empty() {
+                    ("eCash Transaction".into(), false)
+                } else {
+                    ("Invalid eToken Transaction".into(), true)
+                }
             }
         };
-        let token_hash_str = match tx.tx_meta.variant {
-            TxMetaVariant::SatsOnly => None,
-            TxMetaVariant::Slp { token_id, .. } => Some(hex::encode(&token_id)),
-            TxMetaVariant::InvalidSlp { ref token_id, .. } => Some(hex::encode(&token_id))
-        };
-        let token_section_title = match (&tx.tx_meta.variant, &tx.token_meta) {
-            (
-                TxMetaVariant::Slp { action, .. },
-                Some(_),
-            ) => {
-                let action_str = match action {
-                    SlpV1Genesis => "GENESIS",
-                    SlpV1Mint => "MINT",
-                    SlpV1Send => "SEND",
-                    SlpV1Nft1GroupGenesis => "NFT1 Group GENESIS",
-                    SlpV1Nft1GroupMint => "NFT1 MINT",
-                    SlpV1Nft1GroupSend => "NFT1 Group SEND",
-                    SlpV1Nft1UniqueChildGenesis => "NFT1 Child GENESIS",
-                    SlpV1Nft1UniqueChildSend => "NFT1 Child SEND",
+
+        let token_hex = token_id.as_ref().map(|token| token.to_hex_be());
+
+        let token_section_title: Cow<str> = match &tx.slp_tx_data {
+            Some(slp_tx_data) => {
+                let slp_meta = slp_tx_data.slp_meta.as_ref().expect("Impossible");
+                let token_type = SlpTokenType::from_i32(slp_meta.token_type)
+                    .ok_or_else(|| eyre!("Malformed slp_meta"))?;
+                let tx_type = SlpTxType::from_i32(slp_meta.tx_type)
+                    .ok_or_else(|| eyre!("Malformed slp_meta"))?;
+
+                let action_str = match (token_type, tx_type) {
+                    (SlpTokenType::Fungible, SlpTxType::Genesis) => "GENESIS",
+                    (SlpTokenType::Fungible, SlpTxType::Mint) => "MINT",
+                    (SlpTokenType::Fungible, SlpTxType::Send) => "SEND",
+                    (SlpTokenType::Nft1Group, SlpTxType::Genesis) => "NFT1 GROUP GENESIS",
+                    (SlpTokenType::Nft1Group, SlpTxType::Mint) => "NFT1 GROUP MINT",
+                    (SlpTokenType::Nft1Group, SlpTxType::Send) => "NFT1 GROUP SEND",
+                    (SlpTokenType::Nft1Child, SlpTxType::Genesis) => "NFT1 Child GENESIS",
+                    (SlpTokenType::Nft1Child, SlpTxType::Send) => "NFT1 Child SEND",
+                    _ => "",
                 };
-                format!("Token Details ({} Transaction)", action_str)
-            },
-            (TxMetaVariant::InvalidSlp { .. }, Some(_)) => String::from("Token Details (Invalid Transaction)"),
-            (TxMetaVariant::InvalidSlp { .. }, None) => String::from("Token Details (Invalid Transaction; Unknown Token)"),
-            _ => String::from(""),
+
+                format!("Token Details ({} Transaction)", action_str).into()
+            }
+            None => {
+                if tx.slp_error_msg.is_empty() {
+                    "Token Details (Invalid Transaction)".into()
+                } else {
+                    "".into()
+                }
+            }
         };
-        let is_token = if &title == "eCash Transaction" { false } else { true };
-        let block_meta = self.indexer.db().block_meta(&tx.transaction.block_hash)?;
-        let best_height = self.indexer.db().last_block_height()?;
-        let confirmations = match &block_meta {
-            Some(block_meta) => best_height - block_meta.height as u32 + 1,
+
+        let blockchain_info = self.chronik.blockchain_info().await?;
+        let confirmations = match &tx.block {
+            Some(block_meta) => blockchain_info.tip_height - block_meta.height + 1,
             None => 0,
         };
-        let timestamp = Utc.timestamp(tx.transaction.timestamp, 0);
+        let timestamp = match &tx.block {
+            Some(block_meta) => Utc.timestamp(block_meta.timestamp, 0),
+            None => Utc.timestamp(tx.time_first_seen, 0),
+        };
+
+        let raw_tx = self.chronik.raw_tx(&tx_hash).await?;
+        let raw_tx = raw_tx.hex();
+
+        let tx_stats = calc_tx_stats(&tx, None);
 
         let transaction_template = TransactionTemplate {
-            title: title.as_ref(),
+            title: &title,
             token_section_title: &token_section_title,
-            is_token: is_token,
-            tx_hash_string: tx_hash_str,
-            token_hash_string: token_hash_str,
-            tx: tx,
-            block_meta: block_meta,
-            confirmations: confirmations,
-            timestamp: timestamp,
+            is_token,
+            tx_hex,
+            token_hex,
+            slp_meta: tx
+                .slp_tx_data
+                .as_ref()
+                .and_then(|slp_tx_data| slp_tx_data.slp_meta.clone()),
+            tx,
+            slp_genesis_info: token.and_then(|token| token.slp_tx_data?.genesis_info),
+            sats_input: tx_stats.sats_input,
+            sats_output: tx_stats.sats_output,
+            token_input: tx_stats.token_input,
+            token_output: tx_stats.token_output,
+            raw_tx,
+            confirmations,
+            timestamp,
         };
+
         Ok(warp::reply::html(transaction_template.render().unwrap()))
     }
 }
 
 impl Server {
-    pub async fn address(&self, address: &str, query: HashMap<String, String>) -> Result<impl Reply> {
-        let address = Address::from_cash_addr(address)?;
-        let txs_page: usize = query.get("tx_page").map(|s| s.as_str()).unwrap_or("0").parse()?;
-        let coins_page: usize = query.get("coin_page").map(|s| s.as_str()).unwrap_or("0").parse()?;
-        let page_size = 500;
+    pub async fn address<'a>(&'a self, address: &str) -> Result<impl Reply> {
+        let address = CashAddress::parse_cow(address.into())?;
         let sats_address = address.with_prefix(self.satoshi_addr_prefix);
         let token_address = address.with_prefix(self.tokens_addr_prefix);
-        let legacy_address = to_legacy_address(&address);
-        let address_txs = self.indexer.db().address(&sats_address, txs_page * page_size, page_size)?;
-        let address_num_txs = self.indexer.db().address_num_txs(&address)?;
-        let mut json_txs = self.json_txs(
-            address_txs
-                .iter()
-                .map(|(tx_hash, addr_tx, tx_meta)| {
-                    (tx_hash.as_ref(), addr_tx.timestamp, Some(addr_tx.block_height), tx_meta, (addr_tx.delta_sats, addr_tx.delta_tokens))
-                })
-        ).await?;
-        let balance = self.indexer.db().address_balance(&sats_address, coins_page * page_size, page_size)?;
-        let AddressBalance { balances, utxos } = balance;
-        for (token_id, _) in &utxos {
-            if let Some(token_id) = &token_id {
-                if !json_txs.token_indices.contains_key(token_id.as_ref()) {
-                    if let Some(token_meta) = self.indexer.db().token_meta(token_id)? {
-                        json_txs.token_indices.insert(token_id.to_vec(), json_txs.tokens.len());
-                        json_txs.tokens.push(JsonToken::from_token_meta(token_id, token_meta));
+
+        let legacy_address = to_legacy_address(address.hash().to_string());
+        let sats_address = sats_address.as_str();
+        let token_address = token_address.as_str();
+
+        let (script_type, script_payload) = cash_addr_to_script_type_payload(&address);
+        let script_endpoint = self.chronik.script(script_type, &script_payload);
+        let page_size = 1; // Set to minimum so that num_pages == total existing tx's
+        let address_tx_history = script_endpoint.history_with_page_size(0, page_size).await?;
+        let address_num_txs = address_tx_history.num_pages;
+
+        let utxos = script_endpoint.utxos().await?;
+
+        let mut token_dust: i64 = 0;
+        let mut total_xec: i64 = 0;
+
+        let mut token_ids: HashSet<Sha256d> = HashSet::new();
+        let mut token_utxos: Vec<Utxo> = Vec::new();
+        let mut json_balances: HashMap<String, JsonBalance> = HashMap::new();
+        let mut main_json_balance: JsonBalance = JsonBalance {
+            token_id: None,
+            sats_amount: 0,
+            token_amount: 0,
+            utxos: Vec::new(),
+        };
+
+        for utxo_script in utxos.into_iter() {
+            for utxo in utxo_script.utxos.into_iter() {
+                let OutPoint { txid, out_idx } = &utxo.outpoint.as_ref().unwrap();
+                let mut json_utxo = JsonUtxo {
+                    tx_hash: to_be_hex(txid),
+                    out_idx: *out_idx,
+                    sats_amount: utxo.value,
+                    token_amount: 0,
+                    is_coinbase: utxo.is_coinbase,
+                    block_height: utxo.block_height,
+                };
+
+                match (&utxo.slp_meta, &utxo.slp_token) {
+                    (Some(slp_meta), Some(slp_token)) => {
+                        let token_id_hex = to_be_hex(&slp_meta.token_id);
+                        let token_id_hash = Sha256d::from_slice_be_or_null(&slp_meta.token_id);
+
+                        json_utxo.token_amount = slp_token.amount;
+
+                        match json_balances.entry(token_id_hex) {
+                            Entry::Occupied(mut entry) => {
+                                let entry = entry.get_mut();
+                                entry.sats_amount += utxo.value;
+                                entry.token_amount += i128::from(slp_token.amount);
+                                entry.utxos.push(json_utxo);
+                            }
+                            Entry::Vacant(entry) => {
+                                entry.insert(JsonBalance {
+                                    token_id: Some(to_be_hex(&slp_meta.token_id)),
+                                    sats_amount: utxo.value,
+                                    token_amount: slp_token.amount.into(),
+                                    utxos: vec![json_utxo],
+                                });
+                            }
+                        }
+
+                        token_ids.insert(token_id_hash);
+                        token_dust += utxo.value;
+                        token_utxos.push(utxo);
                     }
+                    _ => {
+                        total_xec += utxo.value;
+                        main_json_balance.utxos.push(json_utxo);
+                    }
+                };
+            }
+        }
+        json_balances.insert(String::from("main"), main_json_balance);
+
+        let tokens = self.batch_get_chronik_tokens(token_ids).await?;
+        let json_tokens = tokens_to_json(&tokens)?;
+
+        let encoded_tokens = serde_json::to_string(&json_tokens)?.replace('\'', r"\'");
+        let encoded_balances = serde_json::to_string(&json_balances)?.replace('\'', r"\'");
+
+        let address_template = AddressTemplate {
+            tokens,
+            token_utxos,
+            token_dust,
+            total_xec,
+            address_num_txs,
+            address: address.as_str(),
+            sats_address,
+            token_address,
+            legacy_address,
+            json_balances,
+            encoded_tokens,
+            encoded_balances,
+        };
+
+        Ok(warp::reply::html(address_template.render().unwrap()))
+    }
+
+    pub async fn batch_get_chronik_tokens(
+        &self,
+        token_ids: HashSet<Sha256d>,
+    ) -> Result<HashMap<String, Token>> {
+        let mut token_calls = Vec::new();
+        let mut token_map = HashMap::new();
+
+        for token_id in token_ids.iter() {
+            token_calls.push(Box::pin(self.chronik.token(token_id)));
+        }
+
+        let tokens = future::try_join_all(token_calls).await?;
+        for token in tokens.into_iter() {
+            if let Some(slp_tx_data) = &token.slp_tx_data {
+                if let Some(slp_meta) = &slp_tx_data.slp_meta {
+                    token_map.insert(hex::encode(&slp_meta.token_id), token);
                 }
             }
         }
-        let token_dust = balances.iter()
-            .filter_map(|(token_id, balance)| token_id.and(Some(balance.0)))
-            .sum::<i64>();
-        let mut json_balances = utxos.into_iter().map(|(token_id, mut utxos)| {
-            let (sats_amount, token_amount) = balances[&token_id];
-            utxos.sort_by_key(|(_, utxo)| -utxo.block_height);
-            (
-                utxos.get(0).map(|(_, utxo)| utxo.block_height).unwrap_or(0),
-                JsonBalance {
-                    token_idx: token_id.and_then(|token_id| json_txs.token_indices.get(token_id.as_ref())).copied(),
-                    sats_amount,
-                    token_amount,
-                    utxos: utxos.into_iter().map(|(utxo_key, utxo)| JsonUtxo {
-                        tx_hash: to_le_hex(&utxo_key.tx_hash),
-                        out_idx: utxo_key.out_idx.get(),
-                        sats_amount: utxo.sats_amount,
-                        token_amount: utxo.token_amount,
-                        is_coinbase: utxo.is_coinbase,
-                        block_height: utxo.block_height,
-                    }).collect(),
-                }
-            )
-        }).collect::<Vec<_>>();
-        json_balances.sort_by_key(|(block_height, balance)| {
-            if balance.token_idx.is_none() {
-                i32::MIN
-            } else {
-                -block_height
-            }
-        });
-        let json_balances: Vec<JsonBalance> = json_balances.into_iter().map(|(_, balance)| balance).collect::<Vec<_>>();
 
-        let encoded_txs = serde_json::to_string(&json_txs.txs)?.replace("'", r"\'");
-        let encoded_tokens = serde_json::to_string(&json_txs.tokens)?.replace("'", r"\'");
-        let encoded_balances = serde_json::to_string(&json_balances)?.replace("'", r"\'");
-
-        let address_template = AddressTemplate {
-            json_balances: json_balances,
-            token_dust: token_dust,
-            address_num_txs: address_num_txs,
-            json_txs: json_txs,
-            address: &address,
-            sats_address: &sats_address,
-            token_address: &token_address,
-            legacy_address: legacy_address,
-            encoded_txs: encoded_txs,
-            encoded_tokens: encoded_tokens,
-            encoded_balances: encoded_balances,
-        };
-        Ok(warp::reply::html(address_template.render().unwrap()))
+        Ok(token_map)
     }
 
     pub async fn address_qr(&self, address: &str) -> Result<impl Reply> {
@@ -409,25 +416,53 @@ impl Server {
     }
 
     pub async fn block_height(&self, height: u32) -> Result<Box<dyn Reply>> {
-        let block_hash = self.indexer.db().block_hash_at(height)?;
-        match block_hash {
-            Some(block_hash) => {
-                let block_hash_str = to_le_hex(&block_hash);
-                let url = format!("/block/{}", block_hash_str);
-                Ok(Box::new(warp::redirect(Uri::try_from(url.as_str())?)))
+        let block = self.chronik.block_by_height(height as i32).await.ok();
+
+        match block {
+            Some(block) => match block.block_info {
+                Some(block_info) => {
+                    let url = format!("/block/{}", to_be_hex(&block_info.hash));
+                    self.redirect(url)
+                }
+                None => Ok(Box::new(warp::reply::html(
+                    html! {
+                        h1 { "Internal Server Error" }
+                    }
+                    .into_string(),
+                ))),
             },
-            None => Ok(Box::new(warp::reply::html(html! {
-                h1 { "Not found" }
-            }.into_string())))
+            None => Ok(Box::new(warp::reply::html(
+                html! {
+                    h1 { "Not found" }
+                }
+                .into_string(),
+            ))),
         }
     }
 
+    pub fn redirect(&self, url: String) -> Result<Box<dyn Reply>> {
+        Ok(Box::new(warp::redirect(Uri::try_from(url.as_str())?)))
+    }
+
     pub async fn search(&self, query: &str) -> Result<Box<dyn Reply>> {
-        match self.indexer.db().search(query)? {
-            Some(url) => Ok(Box::new(warp::redirect(Uri::try_from(url.as_str())?))),
-            None => Ok(Box::new(warp::reply::html(html! {
-                h1 { "Not found" }
-            }.into_string())))
+        if let Ok(address) = CashAddress::parse_cow(query.into()) {
+            return self.redirect(format!("/address/{}", address.as_str()));
         }
+        let bytes = from_be_hex(query)?;
+        let unknown_hash = Sha256d::new(bytes.try_into().unwrap());
+
+        if self.chronik.tx(&unknown_hash).await.is_ok() {
+            return self.redirect(format!("/tx/{}", query));
+        }
+        if self.chronik.block_by_hash(&unknown_hash).await.is_ok() {
+            return self.redirect(format!("/block/{}", query));
+        }
+
+        Ok(Box::new(warp::reply::html(
+            html! {
+                h1 { "Not found" }
+            }
+            .into_string(),
+        )))
     }
 }

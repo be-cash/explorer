@@ -5,115 +5,124 @@
 {% block content %}
   <div class="ui container">
     <table id="coins" class="ui table">
-      {% for balance in json_balances %}
-        {% let token = json_txs.tokens|get_token_by_idx(balance.token_idx) %}
-
-        {% match token %}
-          {% when Some with (token) %}
-            <tr>
-              <td class="token-amount">{{ balance.token_amount|render_token_amount(token.decimals)|safe }}</td>
-              <td>{{ token.token_ticker|safe }}</td>
-              <td>{{ token.token_name|safe }}</td>
-              <td>
-                +{{ balance.sats_amount|render_sats|safe }} XEC dust
-                <a onclick="$('#token-coins-{{ loop.index0 }}').toggle(); loadTokenTable({{ loop.index0 }})">
-                  <span>( {{ balance.utxos.len()|usize_to_u64|render_integer_smallify|safe }}
-                  {% if balance.utxos.len() == 1 %}
-                    coin
-                  {% else %}
-                    coins
-                  {% endif %}
-                  </span>
-                  <i class="icon chevron circle down"></i>
-                  <span>)</span>
+      <tr>
+        <td colspan="20">
+          <div class="address-sats">
+            <div class="balance">
+              <h4>Balance</h4>
+              <h1>
+                {{ total_xec|render_sats|safe }} XEC
+                <a class="show-coins" onclick="$('#sats-coins').toggle(); loadSatsTable();">
+                  Show Coins <i class="icon chevron circle down"></i>
                 </a>
-              </td>
-            </tr>
+              </h1>
 
-            <tr id="token-coins-{{ loop.index0 }}" style="display: none;">
-              <td class="token-table" colspan="20">
-                <div id="tokens-coins-table-{{ loop.index0 }}"></div>
-              </td>
-            </tr>
-          {% when None %}
-            <tr>
-              <td colspan="20">
-                <div class="address-sats">
-                  <div class="balance">
-                    <h4>Balance</h4>
-                    <h1>
-                      {{ balance.sats_amount|render_sats|safe }} XEC
-                      <a class="show-coins" onclick="$('#sats-coins').toggle(); loadSatsTable();">
-                        Show Coins <i class="icon chevron circle down"></i>
-                      </a>
-                    </h1>
+              {% if token_dust > 0 %}
+                <h3>+{{ token_dust|render_sats|safe }} XEC in token dust</h3>
+              {% endif %}
 
-                    {% if token_dust > 0 %}
-                      <h3>+{{ token_dust|render_sats|safe }} XEC in token dust</h3>
-                    {% endif %}
+              {% if address_num_txs == 1 %}
+                {{ address_num_txs }} Transaction
+              {% else %}
+                {{ address_num_txs }} Transactions
+              {% endif %}
 
-                    {% match address_num_txs %}
-                      {% when 1 %}
-                        {{ address_num_txs }} Transaction
-                      {% else %}
-                        {{ address_num_txs }} Transactions
-                    {% endmatch %}
+              <table class="addresses ui table very basic collapsing celled compact">
+                <tbody>
+                  <tr>
+                    <td>Cash Address</td>
+                    <td>{{ sats_address }}</td>
+                  </tr>
 
-                    <table class="addresses ui table very basic collapsing celled compact">
-                      <tbody>
-                        <tr>
-                          <td>Cash Address</td>
-                          <td>{{ sats_address.cash_addr() }}</td>
-                        </tr>
+                  <tr>
+                    <td>Token Address</td>
+                    <td>{{ token_address }}</td>
+                  </tr>
 
-                        <tr>
-                          <td>Token Address</td>
-                          <td>{{ token_address.cash_addr() }}</td>
-                        </tr>
+                  <tr>
+                    <td>Legacy Address</td>
+                    <td>{{ legacy_address }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
 
-                        <tr>
-                          <td>Legacy Address</td>
-                          <td>{{ legacy_address }}</td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
+            <div class="qr-code">
+              <img id="qr-code-img" src="/address-qr/{{ address }}" />
+            </div>
 
-                  <div class="qr-code">
-                    <img id="qr-code-img" src="/address-qr/{{ address.cash_addr() }}" />
-                  </div>
+            {% if sats_address == address %}
+              <div class="qr-kind" id="selected-address-1">
+            {% else %}
+              <div class="qr-kind" id="selected-address-2">
+            {% endif %}
+              <div class="address1">
+                <a onclick="$('#qr-code-img').attr('src', '/address-qr/{{ sats_address }}'); $('.qr-kind').attr('id', 'selected-address-1')"}>
+                    XEC Address
+                </a>
+              </div>
 
-                  {% if sats_address.cash_addr() == address.cash_addr() %}
-                    <div class="qr-kind" id="selected-address-1">
-                  {% else %}
-                    <div class="qr-kind" id="selected-address-2">
-                  {% endif %}
-                    <div class="address1">
-                      <a onclick="$('#qr-code-img').attr('src', '/address-qr/{{ sats_address.cash_addr() }}'); $('.qr-kind').attr('id', 'selected-address-1')"}>
-                          XEC Address
-                      </a>
-                    </div>
+              <div class="address2">
+                <a onclick="$('#qr-code-img').attr('src', '/address-qr/{{ token_address }}'); $('.qr-kind').attr('id', 'selected-address-2')"}>
+                    eToken Address
+                </a>
+              </div>
 
-                    <div class="address2">
-                      <a onclick="$('#qr-code-img').attr('src', '/address-qr/{{ token_address.cash_addr() }}'); $('.qr-kind').attr('id', 'selected-address-2')"}>
-                          eToken Address
-                      </a>
-                    </div>
+              <div class="address3">
+                <a onclick="$('#qr-code-img').attr('src', '/address-qr/{{ legacy_address }}'); $('.qr-kind').attr('id', 'selected-address-3')"}>
+                    Legacy Address
+                </a>
+              </div>
+            </div>
+          </div>
 
-                    <div class="address3">
-                      <a onclick="$('#qr-code-img').attr('src', '/address-qr/{{ legacy_address }}'); $('.qr-kind').attr('id', 'selected-address-3')"}>
-                          Legacy Address
-                      </a>
-                    </div>
-                  </div>
-                </div>
+          <div id="sats-coins" style="display: none;">
+            <div id="sats-coins-table"></div>
+          </div>
+        </td>
+      </tr>
 
-                <div id="sats-coins" style="display: none;">
-                  <div id="sats-coins-table"></div>
-                </div>
-              </td>
-            </tr>
-        {% endmatch %}
+      {% for (token_id, json_balance) in json_balances %}
+        {% if token_id != "main" %}
+          {% let token = tokens|get_token(token_id) %}
+          {% match token %}
+            {% when Some with (token) %}
+              {% match token.slp_tx_data %}
+                {% when Some with (slp_tx_data) %}
+                  {% match slp_tx_data.genesis_info %}
+                    {% when Some with (genesis_info) %}
+                      <tr>
+                        <td class="token-amount">{{ json_balance.token_amount|to_i128|render_token_amount(genesis_info.decimals)|safe }}</td>
+                        <td>{{ genesis_info.token_ticker|string_from_lossy_utf8 }}</td>
+                        <td>{{ genesis_info.token_name|string_from_lossy_utf8 }}</td>
+                        <td>
+                          +{{ json_balance.sats_amount|render_sats|safe }} XEC dust
+                          <a onclick="$('#token-coins-{{ loop.index0 }}').toggle(); loadTokenTable('{{ token_id }}')">
+                            <span>( {{ json_balance.utxos.len() }}
+                            {% if json_balance.token_amount == 1 %}
+                              coin
+                            {% else %}
+                              coins
+                            {% endif %}
+                            </span>
+                            <i class="icon chevron circle down"></i>
+                            <span>)</span>
+                          </a>
+                        </td>
+                      </tr>
+
+                      <tr id="token-coins-{{ loop.index0 }}" style="display: none;">
+                        <td class="token-table" colspan="20">
+                          <div id="tokens-coins-table-{{ token_id }}"></div>
+                        </td>
+                      </tr>
+                    {% when None %}
+                  {% endmatch %}
+                {% when None %}
+              {% endmatch %}
+            {% when None %}
+          {% endmatch %}
+        {% endif %}
       {% endfor %}
     </table>
 
@@ -150,26 +159,17 @@
   </div>
 
   <script type="text/javascript">
-    window.addrTxData = [];
-    window.addrBalances = [];
+    window.addrBalances = {};
 
-    var txs = JSON.parse('{{ encoded_txs|safe }}');
     var tokens = JSON.parse('{{ encoded_tokens|safe }}');
-    var startIdx = window.addrTxData.length;
-    window.addrTxData.length += txs.length;
-    for (var i = 0; i < txs.length; ++i) {
-        var tx = txs[i];
-        tx.token = tx.tokenIdx === null ? null : tokens[tx.tokenIdx];
-        tx.timestamp *= 1000;
-        window.addrTxData[startIdx + i] = tx;
-    }
     var balances = JSON.parse('{{ encoded_balances|safe }}');
-    window.addrBalances.length = balances.length;
-    for (var i = 0; i < balances.length; ++i) {
-        var balance = balances[i];
-        balance.token = balance.tokenIdx === null ? null : tokens[balance.tokenIdx];
-        window.addrBalances[i] = balance;
-    }
+
+    window.addrBalances.length = Object.keys(balances).length;
+    Object.keys(balances).forEach(identifier => {
+      var balance = balances[identifier];
+      balance.token = balance.tokenId === null ? null : tokens[balance.tokenId];
+      window.addrBalances[identifier] = balance;
+    });
   </script>
   <script type="text/javascript" src="/code/address.js?hash=80d7734"></script>
 

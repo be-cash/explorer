@@ -3,7 +3,6 @@ const getAddress = () => window.location.pathname.split('/')[2];
 var isSatsTableLoaded = false;
 function loadSatsTable() {
   if (!isSatsTableLoaded) {
-    console.log(addrBalances[0].utxos);
     webix.ui({
       container: "sats-coins-table",
       view: "datatable",
@@ -33,24 +32,23 @@ function loadSatsTable() {
           header: "XEC amount",
           adjust: true,
           template: function (row) {
-            return renderSats(row.satsAmount) + ' XEC';
+            return renderSats(row.stats.satsAmount) + ' XEC';
           },
         },
       ],
       autoheight: true,
       autowidth: true,
-      data: addrBalances[0].utxos,
+      data: addrBalances["main"].utxos,
     });
     isSatsTableLoaded = true;
   }
 }
 
 var isTokenTableLoaded = {};
-function loadTokenTable(balanceIdx) {
-  if (!isTokenTableLoaded[balanceIdx]) {
-    console.log(addrBalances[balanceIdx].utxos);
+function loadTokenTable(tokenId) {
+  if (!isTokenTableLoaded[tokenId]) {
     webix.ui({
-      container: "tokens-coins-table-" + balanceIdx,
+      container: "tokens-coins-table-" + tokenId,
       view: "datatable",
       columns:[
         {
@@ -75,10 +73,10 @@ function loadTokenTable(balanceIdx) {
         },
         {
           id: "tokenAmount",
-          header: addrBalances[balanceIdx].token.tokenTicker + " amount",
+          header: addrBalances[tokenId].token?.tokenTicker + " amount",
           adjust: true,
           template: function (row) {
-            return renderAmount(row.tokenAmount, addrBalances[balanceIdx].token.decimals) + ' ' + addrBalances[balanceIdx].token.tokenTicker;
+            return renderAmount(row.stats.tokenAmount, addrBalances[tokenId].token?.decimals) + ' ' + addrBalances[tokenId].token?.tokenTicker;
           },
         },
         {
@@ -86,15 +84,15 @@ function loadTokenTable(balanceIdx) {
           header: "XEC amount",
           adjust: true,
           template: function (row) {
-            return renderSats(row.satsAmount) + ' XEC';
+            return renderSats(row.stats.satsAmount) + ' XEC';
           },
         },
       ],
       autoheight: true,
       autowidth: true,
-      data: addrBalances[balanceIdx].utxos,
+      data: addrBalances[tokenId].utxos,
     });
-    isTokenTableLoaded[balanceIdx] = true;
+    isTokenTableLoaded[tokenId] = true;
   }
 }
 
@@ -130,7 +128,7 @@ const renderFee = (_value, _type, row) => {
     return '<div class="ui green horizontal label">Coinbase</div>';
   }
 
-  const fee = renderInteger(row.satsInput - row.satsOutput);
+  const fee = renderInteger(row.stats.satsInput - row.stats.satsOutput);
   let markup = '';
 
   markup += `<span>${fee}</span>`
@@ -143,17 +141,17 @@ const renderFeePerByte = (_value, _type, row) => {
   if (row.isCoinbase) {
     return '';
   }
-  const fee = row.satsInput - row.satsOutput;
+  const fee = row.stats.satsInput - row.stats.satsOutput;
   const feePerByte = fee / row.size;
   return renderInteger(Math.round(feePerByte * 1000)) + '/kB';
 };
 
-const renderAmountXEC = deltaSats => renderSats(deltaSats) + ' XEC';
+const renderAmountXEC = (_value, _type, row) => renderSats(row.stats.deltaSats) + ' XEC';
 
 const renderToken = (_value, _type, row) => {
   if (row.token !== null) {
     var ticker = ' <a href="/tx/' + row.token.tokenId + '">' + row.token.tokenTicker + '</a>';
-    return renderAmount(row.deltaTokens, row.token.decimals) + ticker;
+    return renderAmount(row.stats.deltaTokens, row.token.decimals) + ticker;
   }
   return '';
 };
@@ -237,7 +235,7 @@ const reRenderPage = params => {
     window.state.updateParameters(params)
   }
 
-  const paginationRequest = window.pagination.generatePaginationRequestOffset();
+  const paginationRequest = window.pagination.generatePaginationRequest();
   updateTable(paginationRequest);
 
   const { currentPage, pageArray } = window.pagination.generatePaginationUIParams();

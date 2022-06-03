@@ -323,7 +323,7 @@ impl Server {
 
                 match (&utxo.slp_meta, &utxo.slp_token) {
                     (Some(slp_meta), Some(slp_token)) => {
-                        let token_id_hex = to_be_hex(&slp_meta.token_id);
+                        let token_id_hex = hex::encode(&slp_meta.token_id);
                         let token_id_hash = Sha256d::from_slice_be_or_null(&slp_meta.token_id);
 
                         json_utxo.token_amount = slp_token.amount;
@@ -337,7 +337,7 @@ impl Server {
                             }
                             Entry::Vacant(entry) => {
                                 entry.insert(JsonBalance {
-                                    token_id: Some(to_be_hex(&slp_meta.token_id)),
+                                    token_id: Some(hex::encode(&slp_meta.token_id)),
                                     sats_amount: utxo.value,
                                     token_amount: slp_token.amount.into(),
                                     utxos: vec![json_utxo],

@@ -173,7 +173,7 @@ const datatable = () => {
 
   $('#address-txs-table').DataTable({
     searching: false,
-    lengthMenu: [50, 100, 250, 500, 1000],
+    lengthMenu: [50, 100, 200],
     pageLength: DEFAULT_ROWS_PER_PAGE,
     language: {
       loadingRecords: '',

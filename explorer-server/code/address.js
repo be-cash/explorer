@@ -32,7 +32,7 @@ function loadSatsTable() {
           header: "XEC amount",
           adjust: true,
           template: function (row) {
-            return renderSats(row.stats.satsAmount) + ' XEC';
+            return renderSats(row.satsAmount) + ' XEC';
           },
         },
       ],
@@ -76,7 +76,7 @@ function loadTokenTable(tokenId) {
           header: addrBalances[tokenId].token?.tokenTicker + " amount",
           adjust: true,
           template: function (row) {
-            return renderAmount(row.stats.tokenAmount, addrBalances[tokenId].token?.decimals) + ' ' + addrBalances[tokenId].token?.tokenTicker;
+            return renderAmount(row.tokenAmount, addrBalances[tokenId].token?.decimals) + ' ' + addrBalances[tokenId].token?.tokenTicker;
           },
         },
         {
@@ -84,7 +84,7 @@ function loadTokenTable(tokenId) {
           header: "XEC amount",
           adjust: true,
           template: function (row) {
-            return renderSats(row.stats.satsAmount) + ' XEC';
+            return renderSats(row.satsAmount) + ' XEC';
           },
         },
       ],
@@ -181,7 +181,7 @@ const datatable = () => {
       emptyTable: '',
     },
     ajax: `/api/address/${address}/transactions`,
-    order: [ [ 1, 'desc' ] ],
+    order: [],
     responsive: {
         details: {
             type: 'column',

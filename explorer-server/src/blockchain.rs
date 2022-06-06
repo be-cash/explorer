@@ -1,5 +1,3 @@
-use std::str::FromStr;
-
 use bitcoinsuite_chronik_client::ScriptType;
 use bitcoinsuite_core::{AddressType, CashAddress, Hashed, Op, Script, ShaRmd160};
 use bitcoinsuite_error::Result;
@@ -56,11 +54,18 @@ pub fn destination_from_script<'a>(prefix: &'a str, script: &[u8]) -> Destinatio
     }
 }
 
-pub fn to_legacy_address(address_hash_hex: String) -> String {
-    let script =
-        bitcoin::Script::new_p2pkh(&FromStr::from_str(&address_hash_hex).expect("Invalid pkh"));
-    let address = bitcoin::Address::from_script(&script, bitcoin::Network::Bitcoin);
-    let address = address.expect("Invalid address");
+pub fn to_legacy_address(cash_address: &CashAddress) -> String {
+    use bitcoin::{
+        hashes::{hash160, Hash},
+        PubkeyHash, ScriptHash,
+    };
+    let hash = hash160::Hash::from_slice(cash_address.hash().as_slice()).expect("Impossible");
+    let script = match cash_address.addr_type() {
+        AddressType::P2PKH => bitcoin::Script::new_p2pkh(&PubkeyHash::from_hash(hash)),
+        AddressType::P2SH => bitcoin::Script::new_p2sh(&ScriptHash::from_hash(hash)),
+    };
+    let address =
+        bitcoin::Address::from_script(&script, bitcoin::Network::Bitcoin).expect("Invalid address");
     address.to_string()
 }
 

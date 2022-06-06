@@ -284,7 +284,7 @@ impl Server {
         let sats_address = address.with_prefix(self.satoshi_addr_prefix);
         let token_address = address.with_prefix(self.tokens_addr_prefix);
 
-        let legacy_address = to_legacy_address(address.hash().to_string());
+        let legacy_address = to_legacy_address(&address);
         let sats_address = sats_address.as_str();
         let token_address = token_address.as_str();
 

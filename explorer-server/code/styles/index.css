@@ -437,6 +437,7 @@ table.dataTable.no-footer {
 
 #blocks-table_length,
 #address-txs-table_length,
+#outpoints-table_length,
 #txs-table_length {
   margin-bottom: 10px;
   float: right;
@@ -444,12 +445,14 @@ table.dataTable.no-footer {
 
 #blocks-table_paginate,
 #address-txs-table_paginate,
+#outpoints-table_paginate,
 #txs-table_paginate {
   display: none;
 }
 
 #blocks-table_info,
 #address-txs-table_info,
+#outpoints-table_info,
 #txs-table_info {
   display: none;
 }
@@ -502,6 +505,21 @@ table.dataTable.no-footer {
 .block__detail-table {
   width: 100%!important;
   padding: 0 6px 0 6px;
+}
+
+.address__menu-tabs {
+  margin-bottom: -33px!important;
+}
+
+.address__menu-tab {
+  background: transparent!important;
+  cursor: pointer;
+  z-index: 2;
+}
+
+.address__menu-tab.active {
+  border-radius: 0!important;
+  border-bottom: 3px solid #fb7b81!important;
 }
 
 .loader__container {

@@ -1,48 +1,17 @@
 const getAddress = () => window.location.pathname.split('/')[2];
 
-var isSatsTableLoaded = false;
-function loadSatsTable() {
-  if (!isSatsTableLoaded) {
-    webix.ui({
-      container: "sats-coins-table",
-      view: "datatable",
-      columns:[
-        {
-          id: "outpoint",
-          header: "Outpoint",
-          css: "hash",
-          adjust: true,
-          template: function (row) {
-            return '<a href="/tx/' + row.txHash + '">' + 
-              row.txHash + ':' + row.outIdx +
-              (row.isCoinbase ? '<div class="ui green horizontal label">Coinbase</div>' : '') +
-              '</a>';
-          },
-        },
-        {
-          id: "blockHeight",
-          header: "Block Height",
-          adjust: true,
-          template: function (row) {
-            return '<a href="/block-height/' + row.blockHeight + '">' + renderInteger(row.blockHeight) + '</a>';
-          },
-        },
-        {
-          id: "amount",
-          header: "XEC amount",
-          adjust: true,
-          template: function (row) {
-            return renderSats(row.satsAmount) + ' XEC';
-          },
-        },
-      ],
-      autoheight: true,
-      autowidth: true,
-      data: addrBalances["main"].utxos,
-    });
-    isSatsTableLoaded = true;
-  }
-}
+const renderOutpoint = (_value, _type, row) => {
+  const { txHash, outIdx } = row;
+  const label = row.isCoinbase ? '<div class="ui green horizontal label">Coinbase</div>' : '';
+  return `<a href="/tx/${txHash}">${txHash}:${outIdx} ${label}</a>`;
+};
+
+const renderOutpointHeight = (_value, _type, row) => {
+  const { blockHeight } = row;
+  return `<a href="/block-height/${blockHeight}">${renderInteger(blockHeight)}</a>`;
+};
+
+const renderXEC = sats => `${renderSats(sats)} XEC`;
 
 var isTokenTableLoaded = {};
 function loadTokenTable(tokenId) {
@@ -156,19 +125,21 @@ const renderToken = (_value, _type, row) => {
   return '';
 };
 
-const updateLoading = (status) => {
+const updateLoading = (status, tableId) => {
   if (status) {
-    $('#address-txs-table > tbody').addClass('blur');
+    $(`#${tableId} > tbody`).addClass('blur');
+    $('.loader__container--fullpage').removeClass('hidden');
     $('#pagination').addClass('hidden');
     $('#footer').addClass('hidden');
   } else {
-    $('#address-txs-table > tbody').removeClass('blur');
+    $(`#${tableId} > tbody`).removeClass('blur');
+    $('.loader__container--fullpage').addClass('hidden');
     $('#pagination').removeClass('hidden');
     $('#footer').removeClass('hidden');
   }
 };
 
-const datatable = () => {
+const datatableTxs = () => {
   const address = getAddress();
 
   $('#address-txs-table').DataTable({
@@ -181,7 +152,7 @@ const datatable = () => {
       emptyTable: '',
     },
     ajax: `/api/address/${address}/transactions`,
-    order: [],
+    order: [ ],
     responsive: {
         details: {
             type: 'column',
@@ -207,18 +178,83 @@ const datatable = () => {
       { name: 'responsive', render: () => '' },
     ],
   });
+
+  const { rows } = window.state.getParameters('transactions');
+  $('#address-txs-table').dataTable().api().page.len(rows);
 }
 
+const datatableOutpoints = () => {
+  const address = getAddress();
+
+  $('#outpoints-table').DataTable({
+    searching: false,
+    lengthMenu: [50, 100, 250, 500, 1000],
+    pageLength: DEFAULT_ROWS_PER_PAGE,
+    language: {
+      loadingRecords: '',
+      zeroRecords: '',
+      emptyTable: '',
+    },
+    ajax: {
+      url: `/api/address/${address}/balances`,
+      dataSrc: response => {
+        window.state.setPaginationTotalEntries('outpoints', response.data['main'].utxos.length)
+        reRenderPage();
+
+        return response.data['main'].utxos;
+      }
+    },
+    order: [ ],
+    responsive: {
+        details: {
+            type: 'column',
+            target: -1
+        }
+    },
+    columnDefs: [ {
+        className: 'dtr-control',
+        orderable: false,
+        targets:   -1
+    } ],
+    columns:[
+      { name: "outpoint", className: "hash", render: renderOutpoint },
+      { name: "block", render: renderOutpointHeight },
+      { name: "xec", data: 'satsAmount', render: renderXEC },
+      { name: 'responsive', render: () => '' },
+    ],
+  });
+
+  const { rows } = window.state.getParameters('outpoints');
+  $('#outpoints-table').dataTable().api().page.len(rows);
+};
+
 $('#address-txs-table').on('xhr.dt', () => {
-  updateLoading(false);
+  updateLoading(false, 'address-txs-table');
 });
 
-const updateTable = (paginationRequest) => {
+$('#outpoints-table').on('xhr.dt', () => {
+  updateLoading(false, 'outpoints-table');
+});
+
+$('#outpoints-table').on('init.dt', () => {
+  const { rows, page } = window.state.getParameters('outpoints');
+  updateLoading(true, 'address-txs-table');
+
+  $('#outpoints-table').dataTable().api().page.len(rows);
+  $('#outpoints-table').DataTable().page(page).draw('page');
+});
+
+const updateTransactionsTable = paginationRequest => {
   const params = new URLSearchParams(paginationRequest).toString();
   const address = getAddress();
 
-  updateLoading(true);
+  updateLoading(true, 'address-txs-table');
   $('#address-txs-table').dataTable().api().ajax.url(`/api/address/${address}/transactions?${params}`).load()
+}
+
+const updateOutpointsTable = paginationRequest => {
+  const { page } = paginationRequest;
+  $('#outpoints-table').DataTable().page(page).draw('page');
 }
 
 const goToPage = (event, page) => {
@@ -226,23 +262,50 @@ const goToPage = (event, page) => {
   reRenderPage({ page });
 };
 
-$(document).on('change', '[name="address-txs-table_length"]', event => {
-  reRenderPage({ rows: event.target.value, page: 1 });
+$(document).on('change', '[name*="-table_length"]', event => {
+  reRenderPage({
+    rows: event.target.value,
+    page: 0,
+  });
 });
 
 const reRenderPage = params => {
   if (params) {
-    window.state.updateParameters(params)
+    params = window.state.updateParameters(params);
+  } else {
+    params = window.state.getParameters();
+
+    if (!params.currentTab) {
+      window.state.updateParameters({ currentTab: 'transactions' });
+    }
+  }
+
+  if (params.currentTab) {
+    $('.menu .item').tab('change tab', params.currentTab);
   }
 
   const paginationRequest = window.pagination.generatePaginationRequest();
-  updateTable(paginationRequest);
+
+  if (params.currentTab == 'transactions') {
+    updateTransactionsTable(paginationRequest);
+  }
+  else if (params.currentTab == 'outpoints') {
+    updateOutpointsTable(paginationRequest)
+  }
 
   const { currentPage, pageArray } = window.pagination.generatePaginationUIParams();
   window.pagination.generatePaginationUI(currentPage, pageArray);
 };
 
 $(document).ready(() => {
-  datatable();
+  datatableTxs();
+  datatableOutpoints();
+
+  $('.menu .item').tab({
+    onVisible: tabPath => (
+      reRenderPage({ currentTab: tabPath })
+    )
+  });
+
   reRenderPage();
 });

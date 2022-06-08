@@ -128,10 +128,12 @@ const renderToken = (_value, _type, row) => {
 const updateLoading = (status, tableId) => {
   if (status) {
     $(`#${tableId} > tbody`).addClass('blur');
+    $('.loader__container--fullpage').removeClass('hidden');
     $('#pagination').addClass('hidden');
     $('#footer').addClass('hidden');
   } else {
     $(`#${tableId} > tbody`).removeClass('blur');
+    $('.loader__container--fullpage').addClass('hidden');
     $('#pagination').removeClass('hidden');
     $('#footer').removeClass('hidden');
   }
@@ -236,6 +238,8 @@ $('#outpoints-table').on('xhr.dt', () => {
 
 $('#outpoints-table').on('init.dt', () => {
   const { rows, page } = window.state.getParameters('outpoints');
+  updateLoading(true, 'address-txs-table');
+
   $('#outpoints-table').dataTable().api().page.len(rows);
   $('#outpoints-table').DataTable().page(page).draw('page');
 });
@@ -244,7 +248,7 @@ const updateTransactionsTable = paginationRequest => {
   const params = new URLSearchParams(paginationRequest).toString();
   const address = getAddress();
 
-  updateLoading(true);
+  updateLoading(true, 'address-txs-table');
   $('#address-txs-table').dataTable().api().ajax.url(`/api/address/${address}/transactions?${params}`).load()
 }
 

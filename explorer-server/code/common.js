@@ -123,6 +123,7 @@ const scrollToBottom = () => {
 
 (function(state, $) {
   const DEFAULT_PAGE = 1;
+  const DEFAULT_PAGE_ZERO_INDEX = 0;
   const DEFAULT_ROWS_PER_PAGE = 100;
   const DEFAULT_ORDER = 'desc';
 
@@ -132,7 +133,7 @@ const scrollToBottom = () => {
   };
 
   const handleTabUpdate = params => {
-    if ((!params.page && !params.rows) || !params.currentTab) {
+    if (((params.page === undefined) && !params.rows) || !params.currentTab) {
       return params;
     }
 
@@ -203,12 +204,13 @@ const scrollToBottom = () => {
 
     const currentTab = namespace ? namespace : urlParams.currentTab;
     const page = validatePaginationInts(urlParams.page, DEFAULT_PAGE);
+    const zeroIndexPage = page - 1;
     const rows = validatePaginationInts(urlParams.rows, DEFAULT_ROWS_PER_PAGE);
     const order = urlParams.order || DEFAULT_ORDER;
     const start = parseInt(urlParams.start) || 0;
     const end = parseInt(urlParams.end) || state.getPaginationTotalEntries(currentTab);
 
-    return { ...urlParams, page, rows, order, start, end, currentTab };
+    return { ...urlParams, page, zeroIndexPage, rows, order, start, end, currentTab };
   }
 
   state.updateParameters = params => {
@@ -285,8 +287,8 @@ const scrollToBottom = () => {
   };
 
   pagination.generatePaginationRequest = () => {
-    const { page, rows } = window.state.getParameters();
-    return { page, take: rows };
+    const { zeroIndexPage, rows } = window.state.getParameters();
+    return { page: zeroIndexPage, take: rows };
   };
 
   const generatePaginationArray = (currentPage, max, slots) => {

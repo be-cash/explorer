@@ -261,7 +261,7 @@ const goToPage = (event, page) => {
 $(document).on('change', '[name*="-table_length"]', event => {
   reRenderPage({
     rows: event.target.value,
-    page: 1,
+    page: 0,
   });
 });
 

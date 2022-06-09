@@ -156,13 +156,13 @@ const renderToken = (_value, _type, row) => {
   return '';
 };
 
-const updateLoading = (status) => {
-  if (status) {
-    $('#address-txs-table > tbody').addClass('blur');
+const updateTableLoading = (isLoading, tableId) => {
+  if (isLoading) {
+    $(`#${tableId} > tbody`).addClass('blur');
     $('#pagination').addClass('hidden');
     $('#footer').addClass('hidden');
   } else {
-    $('#address-txs-table > tbody').removeClass('blur');
+    $(`#${tableId} > tbody`).removeClass('blur');
     $('#pagination').removeClass('hidden');
     $('#footer').removeClass('hidden');
   }
@@ -210,14 +210,14 @@ const datatable = () => {
 }
 
 $('#address-txs-table').on('xhr.dt', () => {
-  updateLoading(false);
+  updateTableLoading(false, 'address-txs-table');
 });
 
 const updateTable = (paginationRequest) => {
   const params = new URLSearchParams(paginationRequest).toString();
   const address = getAddress();
 
-  updateLoading(true);
+  updateTableLoading(true, 'address-txs-table');
   $('#address-txs-table').dataTable().api().ajax.url(`/api/address/${address}/transactions?${params}`).load()
 }
 

@@ -1,0 +1,15 @@
+[package]
+name = "explorer-server-mock"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+bitcoinsuite-chronik-client = { path = "../../bitcoinsuite/bitcoinsuite-chronik-client" }
+bitcoinsuite-test-utils =  { path = "../../bitcoinsuite/bitcoinsuite-test-utils" }
+bitcoinsuite-error =  { path = "../../bitcoinsuite/bitcoinsuite-error" }
+explorer-server =  { path = "../explorer-server" }
+rand = "0.8.5"
+tokio = { version = "1.14", features = ["full"] }
+axum = "0.5.9"

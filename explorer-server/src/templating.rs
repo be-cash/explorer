@@ -1,6 +1,6 @@
 use askama::Template;
 use bitcoinsuite_chronik_client::proto::{
-    BlockDetails, BlockInfo, SlpTokenType, SlpTxType, Token, Tx, Utxo, SlpGenesisInfo, SlpMeta,
+    BlockDetails, BlockInfo, SlpGenesisInfo, SlpMeta, SlpTokenType, SlpTxType, Token, Tx, Utxo,
 };
 use chrono::{DateTime, Utc};
 use std::collections::HashMap;

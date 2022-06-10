@@ -1,4 +1,5 @@
 use askama::Template;
+use axum::response::Redirect;
 use bitcoinsuite_chronik_client::proto::{SlpTokenType, SlpTxType, Token, Utxo};
 use bitcoinsuite_chronik_client::{proto::OutPoint, ChronikClient};
 use bitcoinsuite_core::{CashAddress, Hashed, Sha256d};
@@ -6,12 +7,10 @@ use bitcoinsuite_error::Result;
 use chrono::{TimeZone, Utc};
 use eyre::{bail, eyre};
 use futures::future;
-use maud::html;
 use std::{
     borrow::Cow,
     collections::{hash_map::Entry, HashMap, HashSet},
 };
-use warp::{http::Uri, Reply};
 
 use crate::{
     api::{block_txs_to_json, calc_tx_stats, tokens_to_json, tx_history_to_json},
@@ -42,24 +41,28 @@ impl Server {
 }
 
 impl Server {
-    pub async fn homepage(&self) -> Result<impl Reply> {
+    pub async fn homepage(&self) -> Result<String> {
         let homepage = HomepageTemplate {};
-        Ok(warp::reply::html(homepage.render().unwrap()))
+        Ok(homepage.render().unwrap())
     }
 
-    pub async fn blocks(&self) -> Result<impl Reply> {
+    pub async fn blocks(&self) -> Result<String> {
         let blockchain_info = self.chronik.blockchain_info().await?;
 
         let blocks_template = BlocksTemplate {
             last_block_height: blockchain_info.tip_height as u32,
         };
 
-        Ok(warp::reply::html(blocks_template.render().unwrap()))
+        Ok(blocks_template.render().unwrap())
     }
 }
 
 impl Server {
-    pub async fn data_blocks(&self, start_height: i32, end_height: i32) -> Result<impl Reply> {
+    pub async fn data_blocks(
+        &self,
+        start_height: i32,
+        end_height: i32,
+    ) -> Result<JsonBlocksResponse> {
         let blocks = self.chronik.blocks(start_height, end_height).await?;
 
         let mut json_blocks = Vec::with_capacity(blocks.len());
@@ -74,12 +77,10 @@ impl Server {
             });
         }
 
-        Ok(serde_json::to_string(&JsonBlocksResponse {
-            data: json_blocks,
-        })?)
+        Ok(JsonBlocksResponse { data: json_blocks })
     }
 
-    pub async fn data_block_txs(&self, block_hex: &str) -> Result<impl Reply> {
+    pub async fn data_block_txs(&self, block_hex: &str) -> Result<JsonTxsResponse> {
         let block_hash = Sha256d::from_hex_be(block_hex)?;
         let block = self.chronik.block_by_hash(&block_hash).await?;
 
@@ -96,14 +97,14 @@ impl Server {
         let tokens_by_hex = self.batch_get_chronik_tokens(token_ids).await?;
         let json_txs = block_txs_to_json(block, &tokens_by_hex)?;
 
-        Ok(serde_json::to_string(&JsonTxsResponse { data: json_txs })?)
+        Ok(JsonTxsResponse { data: json_txs })
     }
 
     pub async fn data_address_txs(
         &self,
         address: &str,
         query: HashMap<String, String>,
-    ) -> Result<impl Reply> {
+    ) -> Result<JsonTxsResponse> {
         let address = CashAddress::parse_cow(address.into())?;
         let (script_type, script_payload) = cash_addr_to_script_type_payload(&address);
         let script_endpoint = self.chronik.script(script_type, &script_payload);
@@ -134,12 +135,12 @@ impl Server {
         let json_tokens = tokens_to_json(&tokens)?;
         let json_txs = tx_history_to_json(&address, address_tx_history, &json_tokens)?;
 
-        Ok(serde_json::to_string(&JsonTxsResponse { data: json_txs })?)
+        Ok(JsonTxsResponse { data: json_txs })
     }
 }
 
 impl Server {
-    pub async fn block(&self, block_hex: &str) -> Result<impl Reply> {
+    pub async fn block(&self, block_hex: &str) -> Result<String> {
         let block_hash = Sha256d::from_hex_be(block_hex)?;
 
         let block = self.chronik.block_by_hash(&block_hash).await?;
@@ -167,10 +168,10 @@ impl Server {
             coinbase_data,
         };
 
-        Ok(warp::reply::html(block_template.render().unwrap()))
+        Ok(block_template.render().unwrap())
     }
 
-    pub async fn tx(&self, tx_hex: &str) -> Result<impl Reply> {
+    pub async fn tx(&self, tx_hex: &str) -> Result<String> {
         let tx_hash = Sha256d::from_hex_be(tx_hex)?;
         let tx = self.chronik.tx(&tx_hash).await?;
         let token_id = match &tx.slp_tx_data {
@@ -274,12 +275,12 @@ impl Server {
             timestamp,
         };
 
-        Ok(warp::reply::html(transaction_template.render().unwrap()))
+        Ok(transaction_template.render().unwrap())
     }
 }
 
 impl Server {
-    pub async fn address<'a>(&'a self, address: &str) -> Result<impl Reply> {
+    pub async fn address<'a>(&'a self, address: &str) -> Result<String> {
         let address = CashAddress::parse_cow(address.into())?;
         let sats_address = address.with_prefix(self.satoshi_addr_prefix);
         let token_address = address.with_prefix(self.tokens_addr_prefix);
@@ -379,7 +380,7 @@ impl Server {
             encoded_balances,
         };
 
-        Ok(warp::reply::html(address_template.render().unwrap()))
+        Ok(address_template.render().unwrap())
     }
 
     pub async fn batch_get_chronik_tokens(
@@ -405,64 +406,45 @@ impl Server {
         Ok(token_map)
     }
 
-    pub async fn address_qr(&self, address: &str) -> Result<impl Reply> {
+    pub async fn address_qr(&self, address: &str) -> Result<Vec<u8>> {
         use qrcode_generator::QrCodeEcc;
         if address.len() > 60 {
             bail!("Invalid address length");
         }
         let png = qrcode_generator::to_png_to_vec(address, QrCodeEcc::Quartile, 160)?;
-        let reply = warp::reply::with_header(png, "Content-Type", "image/png");
-        Ok(reply)
+        Ok(png)
     }
 
-    pub async fn block_height(&self, height: u32) -> Result<Box<dyn Reply>> {
+    pub async fn block_height(&self, height: u32) -> Result<Redirect> {
         let block = self.chronik.block_by_height(height as i32).await.ok();
 
         match block {
-            Some(block) => match block.block_info {
-                Some(block_info) => {
-                    let url = format!("/block/{}", to_be_hex(&block_info.hash));
-                    self.redirect(url)
-                }
-                None => Ok(Box::new(warp::reply::html(
-                    html! {
-                        h1 { "Internal Server Error" }
-                    }
-                    .into_string(),
-                ))),
-            },
-            None => Ok(Box::new(warp::reply::html(
-                html! {
-                    h1 { "Not found" }
-                }
-                .into_string(),
-            ))),
+            Some(block) => {
+                let block_info = block.block_info.expect("Impossible");
+                Ok(self.redirect(format!("/block/{}", to_be_hex(&block_info.hash))))
+            }
+            None => Ok(self.redirect("/404".into())),
         }
     }
 
-    pub fn redirect(&self, url: String) -> Result<Box<dyn Reply>> {
-        Ok(Box::new(warp::redirect(Uri::try_from(url.as_str())?)))
-    }
-
-    pub async fn search(&self, query: &str) -> Result<Box<dyn Reply>> {
+    pub async fn search(&self, query: &str) -> Result<Redirect> {
         if let Ok(address) = CashAddress::parse_cow(query.into()) {
-            return self.redirect(format!("/address/{}", address.as_str()));
+            return Ok(self.redirect(format!("/address/{}", address.as_str())));
         }
         let bytes = from_be_hex(query)?;
         let unknown_hash = Sha256d::new(bytes.try_into().unwrap());
 
         if self.chronik.tx(&unknown_hash).await.is_ok() {
-            return self.redirect(format!("/tx/{}", query));
+            return Ok(self.redirect(format!("/tx/{}", query)));
         }
         if self.chronik.block_by_hash(&unknown_hash).await.is_ok() {
-            return self.redirect(format!("/block/{}", query));
+            return Ok(self.redirect(format!("/block/{}", query)));
         }
 
-        Ok(Box::new(warp::reply::html(
-            html! {
-                h1 { "Not found" }
-            }
-            .into_string(),
-        )))
+        Ok(self.redirect("/404".into()))
+    }
+
+    pub fn redirect(&self, url: String) -> Redirect {
+        Redirect::permanent(&url)
     }
 }

@@ -432,7 +432,7 @@ impl Server {
             return Ok(self.redirect(format!("/address/{}", address.as_str())));
         }
         let bytes = from_be_hex(query)?;
-        let unknown_hash = Sha256d::new(bytes.try_into().unwrap());
+        let unknown_hash = Sha256d::from_slice(&bytes)?;
 
         if self.chronik.tx(&unknown_hash).await.is_ok() {
             return Ok(self.redirect(format!("/tx/{}", query)));

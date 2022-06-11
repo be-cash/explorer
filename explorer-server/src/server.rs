@@ -1,5 +1,5 @@
 use askama::Template;
-use axum::response::Redirect;
+use axum::{response::Redirect, routing::get, Router};
 use bitcoinsuite_chronik_client::proto::{SlpTokenType, SlpTxType, Token, Utxo};
 use bitcoinsuite_chronik_client::{proto::OutPoint, ChronikClient};
 use bitcoinsuite_core::{CashAddress, Hashed, Sha256d};
@@ -17,6 +17,10 @@ use crate::{
     blockchain::{
         calculate_block_difficulty, cash_addr_to_script_type_payload, from_be_hex, to_be_hex,
         to_legacy_address,
+    },
+    server_http::{
+        address, address_qr, block, block_height, blocks, data_address_txs, data_block_txs,
+        data_blocks, homepage, search, serve_files, tx,
     },
     server_primitives::{JsonBalance, JsonBlock, JsonBlocksResponse, JsonTxsResponse, JsonUtxo},
     templating::{
@@ -37,6 +41,24 @@ impl Server {
             satoshi_addr_prefix: "ecash",
             tokens_addr_prefix: "etoken",
         })
+    }
+
+    pub fn router(&self) -> Router {
+        Router::new()
+            .route("/", get(homepage))
+            .route("/tx/:hash", get(tx))
+            .route("/blocks", get(blocks))
+            .route("/block/:hash", get(block))
+            .route("/block-height/:height", get(block_height))
+            .route("/address/:hash", get(address))
+            .route("/address-qr/:hash", get(address_qr))
+            .route("/search/:query", get(search))
+            .route("/api/blocks/:start_height/:end_height", get(data_blocks))
+            .route("/api/block/:hash/transactions", get(data_block_txs))
+            .route("/api/address/:hash/transactions", get(data_address_txs))
+            .nest("/code", serve_files("../explorer-server/code"))
+            .nest("/assets", serve_files("../explorer-server/assets"))
+            .nest("/favicon.ico", serve_files("../explorer-server/assets/favicon.png"))
     }
 }
 

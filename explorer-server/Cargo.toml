@@ -26,3 +26,10 @@ humansize = "1.1.1"
 eyre = "0.6"
 axum = "0.5.7"
 tower-http = { version = "0.3.4", features = ["fs"] }
+
+[dev-dependencies]
+explorer-server-mock =  { path = "../explorer-server-mock" }
+httpmock = "0.6.6"
+json = "0.12.4"
+prost = "0.9"
+reqwest = "0.11.11"

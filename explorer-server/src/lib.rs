@@ -1,5 +1,5 @@
 mod api;
-mod blockchain;
+pub mod blockchain;
 pub mod config;
 pub mod server;
 pub mod server_error;

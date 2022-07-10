@@ -1,7 +1,7 @@
 use crate::{
     server::Server,
     server_error::{to_server_error, ServerError},
-    server_primitives::{JsonBlocksResponse, JsonTxsResponse},
+    server_primitives::{JsonBalancesResponse, JsonBlocksResponse, JsonTxsResponse},
 };
 use axum::{
     extract::Path,
@@ -97,6 +97,18 @@ pub async fn data_address_txs(
     Ok(Json(
         server
             .data_address_txs(&hash, query)
+            .await
+            .map_err(to_server_error)?,
+    ))
+}
+
+pub async fn data_address_balances(
+    Path(hash): Path<String>,
+    server: Extension<Arc<Server>>,
+) -> Result<Json<JsonBalancesResponse>, ServerError> {
+    Ok(Json(
+        server
+            .data_address_balances(&hash)
             .await
             .map_err(to_server_error)?,
     ))

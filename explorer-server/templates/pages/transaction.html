@@ -172,7 +172,7 @@
         <table id="inputs" class="ui very basic table">
           <tbody>
             {% for input in tx.inputs %}
-              {% call input::render(loop.index0, input, tx) %}
+              {% call input::render(loop.index0, input, tx, slp_genesis_info) %}
             {% endfor %}
           </tbody>
         </table>
@@ -190,7 +190,7 @@
         <table id="outputs" class="ui very basic table">
           <tbody>
             {% for output in tx.outputs %}
-              {% call output::render(loop.index0, output, tx) %}
+              {% call output::render(loop.index0, output, tx, slp_genesis_info) %}
             {% endfor %}
           </tbody>
         </table>

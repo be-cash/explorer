@@ -102,6 +102,6 @@ pub async fn data_address_txs(
     ))
 }
 
-pub fn serve_files(path: &str) -> MethodRouter {
+pub fn serve_files(path: &std::path::Path) -> MethodRouter {
     get_service(ServeDir::new(path)).handle_error(|_| ready(StatusCode::INTERNAL_SERVER_ERROR))
 }

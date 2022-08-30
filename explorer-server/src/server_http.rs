@@ -4,7 +4,7 @@ use crate::{
     server_primitives::{JsonBlocksResponse, JsonTxsResponse},
 };
 use axum::{
-    extract::Path,
+    extract::{Path, Query},
     http::StatusCode,
     response::{Html, IntoResponse, Redirect},
     routing::{get_service, MethodRouter},
@@ -91,7 +91,7 @@ pub async fn data_block_txs(
 
 pub async fn data_address_txs(
     Path(hash): Path<String>,
-    Path(query): Path<HashMap<String, String>>,
+    Query(query): Query<HashMap<String, String>>,
     server: Extension<Arc<Server>>,
 ) -> Result<Json<JsonTxsResponse>, ServerError> {
     Ok(Json(

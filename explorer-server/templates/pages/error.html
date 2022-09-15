@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+
+{% block body_classes %}overflow-y-scroll{% endblock %}
+
+{% block content %}
+  <h3>Error</h3>
+  <p>
+    Sorry, cannot find this page or it does not exist.<br />There can sometimes
+    be a slight delay between new transactions and the explorer. If this is the
+    case you can try refreshing the page after a few seconds.
+  </p>
+  <div>Error Message:<br />{{ message }}</div>
+  <div style="margin-top: 40px">
+    <a onClick="window.location.reload();" style="cursor: pointer"
+      >Refresh Page</a
+    >
+    |
+    <a href="/blocks">Back to Blocks</a>
+  </div>
+  </div>
+{% endblock %}

@@ -68,3 +68,9 @@ pub struct AddressTemplate<'a> {
     pub encoded_tokens: String,
     pub encoded_balances: String,
 }
+
+#[derive(Template)]
+#[template(path = "pages/error.html")]
+pub struct ErrorTemplate {
+    pub message: String,
+}

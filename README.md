@@ -37,7 +37,7 @@ explorer
 ### 2. Configure & Run
 
 ```
-cd explorer-server/
+cd explorer-exe/
 cp config.dist.toml config.toml
 ```
 

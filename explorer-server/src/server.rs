@@ -61,7 +61,10 @@ impl Server {
             .route("/api/address/:hash/transactions", get(data_address_txs))
             .nest("/code", serve_files(&self.base_dir.join("code")))
             .nest("/assets", serve_files(&self.base_dir.join("assets")))
-            .nest("/favicon.ico", serve_files(&self.base_dir.join("assets").join("favicon.png")))
+            .nest(
+                "/favicon.ico",
+                serve_files(&self.base_dir.join("assets").join("favicon.png")),
+            )
     }
 }
 
@@ -245,12 +248,15 @@ impl Server {
                     (SlpTokenType::Fungible, SlpTxType::Genesis) => "GENESIS",
                     (SlpTokenType::Fungible, SlpTxType::Mint) => "MINT",
                     (SlpTokenType::Fungible, SlpTxType::Send) => "SEND",
+                    (SlpTokenType::Fungible, SlpTxType::Burn) => "BURN",
                     (SlpTokenType::Nft1Group, SlpTxType::Genesis) => "NFT1 GROUP GENESIS",
                     (SlpTokenType::Nft1Group, SlpTxType::Mint) => "NFT1 GROUP MINT",
                     (SlpTokenType::Nft1Group, SlpTxType::Send) => "NFT1 GROUP SEND",
+                    (SlpTokenType::Nft1Group, SlpTxType::Burn) => "NFT1 GROUP BURN",
                     (SlpTokenType::Nft1Child, SlpTxType::Genesis) => "NFT1 Child GENESIS",
                     (SlpTokenType::Nft1Child, SlpTxType::Send) => "NFT1 Child SEND",
-                    _ => "",
+                    (SlpTokenType::Nft1Child, SlpTxType::Burn) => "NFT1 Child BURN",
+                    _ => "Unknown",
                 };
 
                 format!("Token Details ({} Transaction)", action_str).into()

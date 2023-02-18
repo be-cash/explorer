@@ -1,9 +1,10 @@
+use askama::Template;
 use axum::{
     http::StatusCode,
-    response::{IntoResponse, Response},
-    Json,
+    response::{Html, IntoResponse, Response},
 };
-use serde_json::json;
+
+use crate::templating::ErrorTemplate;
 
 pub struct ServerError {
     pub message: String,
@@ -11,11 +12,12 @@ pub struct ServerError {
 
 impl IntoResponse for ServerError {
     fn into_response(self) -> Response {
-        let body = Json(json!({
-            "error": self.message,
-        }));
+        let error_template = ErrorTemplate {
+            message: self.message,
+        };
+        let error_page = error_template.render().unwrap();
 
-        (StatusCode::INTERNAL_SERVER_ERROR, body).into_response()
+        (StatusCode::INTERNAL_SERVER_ERROR, Html(error_page)).into_response()
     }
 }
 

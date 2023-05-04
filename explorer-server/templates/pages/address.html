@@ -85,6 +85,39 @@
       {% for (token_id, json_balance) in json_balances %}
         {% if token_id != "main" %}
           {% let token = tokens|get_token(token_id) %}
+
+          {% match token %}
+            {% when Some with (token) %}
+              {% let genesis_data = token|get_genesis_data %}
+              <tr>
+                <td class="token-amount">{{ json_balance.token_amount|to_i128|render_token_amount(genesis_data.decimals)|safe }}</td>
+                <td>{{ genesis_data.token_ticker|string_from_lossy_utf8 }}</td>
+                <td>{{ genesis_data.token_name|string_from_lossy_utf8 }}</td>
+                <td>
+                  +{{ json_balance.sats_amount|render_sats|safe }} XEC dust
+                  <a onclick="$('#token-coins-{{ loop.index0 }}').toggle(); loadTokenTable('{{ token_id }}')">
+                    <span>( {{ json_balance.utxos.len() }}
+                    {% if json_balance.token_amount == 1 %}
+                      coin
+                    {% else %}
+                      coins
+                    {% endif %}
+                    </span>
+                    <i class="icon chevron circle down"></i>
+                    <span>)</span>
+                  </a>
+                </td>
+              </tr>
+
+              <tr id="token-coins-{{ loop.index0 }}" style="display: none;">
+                <td class="token-table" colspan="20">
+                  <div id="tokens-coins-table-{{ token_id }}"></div>
+                </td>
+              </tr>
+            {% when None %}
+          {% endmatch %}
+
+          {#
           {% match token %}
             {% when Some with (token) %}
               {% match token.slp_tx_data %}
@@ -122,6 +155,7 @@
               {% endmatch %}
             {% when None %}
           {% endmatch %}
+          #}
         {% endif %}
       {% endfor %}
     </table>

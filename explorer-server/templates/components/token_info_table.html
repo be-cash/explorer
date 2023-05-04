@@ -1,4 +1,66 @@
-{% macro render(tx, slp_genesis_info, slp_meta, token_input, token_output) %}
+{% macro render(tx, section) %}
+  <table class="tx-details-table ui very basic table">
+    <tbody>
+      <tr>
+        <td>Token Ticker</td>
+        <td>{{ section.data.token_info.token_ticker }}</td>
+      </tr>
+      <tr>
+        <td>Token Name</td>
+        <td>{{ section.data.token_info.token_name }}</td>
+      </tr>
+      <tr>
+        <td>Token Type</td>
+        <td>
+          {% match section.data.token_info.token_type %}
+            {% when 200 %}
+              Standard Type 200 (
+              <a href="https://ecashbuilders.notion.site/SLPv2-a862a4130877448387373b9e6a93dd97">
+                Specification
+              </a>
+              )
+            {% when _ %}
+              Unknown
+          {% endmatch %}
+        </td>
+      </tr>
+      <tr>
+        <td>Transaction Type</td>
+        <td>
+          {{ section.section_type }}
+        </td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="ui vertical divider tx-details-table__divider"></div>
+  <table class="tx-details-table ui very basic table">
+    <tbody>
+      <tr>
+        <td>Token Output</td>
+        <td>
+          {{ section.data.stats.token_output|to_i128|render_token_amount(section.data.token_info.decimals)|safe }} {{ section.data.token_info.token_ticker }}
+          {% if section.data.stats.token_output < section.data.stats.token_input %}
+            <br />
+            ({{ (section.data.stats.token_input - section.data.stats.token_output)|to_i128|render_token_amount(section.data.token_info.decimals)|safe }} {{ section.data.token_info.token_ticker }} burned)
+          {% endif %}
+        </td>
+      </tr>
+      <tr>
+        <td>Document URL</td>
+        <td>
+          <a href="{{ section.data.token_info.token_url }}" target="_blank">{{ section.data.token_info.token_url }}</a>
+        </td>
+      </tr>
+      <tr>
+        <td>Decimals</td>
+        <td>{{ section.data.token_info.decimals }}</div>
+      </tr>
+    </tbody>
+  </table>
+
+  {#
+
   {% match slp_genesis_info %}
     {% when Some with (genesis_info) %}
       <table class="tx-details-table ui very basic table">
@@ -125,4 +187,6 @@
       </table>
     {% when None %}
   {% endmatch %}
+
+  #}
 {% endmacro %}

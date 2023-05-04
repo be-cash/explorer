@@ -99,6 +99,13 @@ h1, h2, h3, h4, h5 {
   opacity: 0.7;
 }
 
+.token-bubble {
+  border: 1px solid #aaaaaa;
+  border-radius: 4px;
+  padding: 2px 5px;
+  margin-right: 2px;
+}
+
 .zeros {
   opacity: 0.3; 
 }

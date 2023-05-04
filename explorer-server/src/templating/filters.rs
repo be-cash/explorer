@@ -4,12 +4,12 @@ use chrono::DateTime;
 use chrono_humanize::HumanTime;
 use maud::{html, PreEscaped};
 
-use bitcoinsuite_chronik_client::proto::{OutPoint, SlpToken, Token};
+use bitcoinsuite_chronik_client::proto;
 use bitcoinsuite_core::Script;
 use humansize::{file_size_opts as options, FileSize};
 use num_format::{Locale, ToFormattedString};
 
-use crate::blockchain;
+use crate::{blockchain, templating::TemplateSlpv2TokenSection};
 
 fn render_integer_with_small_flag(int: i128, smallify: bool) -> askama::Result<String> {
     let string = int.to_formatted_string(&Locale::en);
@@ -31,7 +31,7 @@ pub fn max(value: &i64, maximum: &i64) -> askama::Result<i64> {
     Ok(*value.max(maximum))
 }
 
-pub fn check_is_coinbase(outpoint: &OutPoint) -> askama::Result<bool> {
+pub fn check_is_coinbase(outpoint: &proto::OutPoint) -> askama::Result<bool> {
     Ok(outpoint.txid == [0; 32] && outpoint.out_idx == 0xffff_ffff)
 }
 
@@ -45,10 +45,10 @@ pub fn destination_from_script<'a>(
 
 pub fn get_script(signature_script: &[u8]) -> askama::Result<String> {
     let script = Script::from_slice(signature_script);
-    Ok(script.hex())
+    Ok(script.to_string())
 }
 
-pub fn check_is_token(slp_token: &Option<SlpToken>) -> askama::Result<bool> {
+pub fn check_is_token(slp_token: &Option<proto::Slpv2Token>) -> askama::Result<bool> {
     Ok(slp_token
         .as_ref()
         .map(|slp| slp.amount > 0 || slp.is_mint_baton)
@@ -155,6 +155,13 @@ pub fn to_le_hex(slice: &[u8]) -> askama::Result<String> {
     Ok(blockchain::to_be_hex(slice))
 }
 
+pub fn to_token_color(slice: &[u8]) -> askama::Result<String> {
+    Ok(format!(
+        "rgba({},{},{},0.3)",
+        slice[31], slice[30], slice[29]
+    ))
+}
+
 pub fn u32_to_u64(value: &u32) -> askama::Result<u64> {
     Ok(*value as u64)
 }
@@ -172,7 +179,7 @@ pub fn render_token_amount(base_amount: &i128, decimals: &u32) -> askama::Result
     let decimal_idx = base_amount_str.len() - decimals;
     let integer_part: i128 = base_amount_str[..decimal_idx].parse().unwrap();
     let fract_part = &base_amount_str[decimal_idx..];
-    let num_fract_sections = (decimals as usize + 2) / 3;
+    let num_fract_sections = (decimals + 2) / 3;
     let mut all_zeros = true;
     let mut rendered = html! {};
     for section_idx in (0..num_fract_sections).rev() {
@@ -192,9 +199,42 @@ pub fn render_token_amount(base_amount: &i128, decimals: &u32) -> askama::Result
     Ok(output.into_string())
 }
 
+pub fn render_section_token_amount(
+    token: &proto::Slpv2Token,
+    slpv2_sections: &[TemplateSlpv2TokenSection],
+) -> askama::Result<String> {
+    render_token_amount(
+        &token.amount.into(),
+        &slpv2_sections[token.section_idx as usize]
+            .data
+            .token_info
+            .decimals,
+    )
+}
+
+pub fn token_ticker(
+    token: &proto::Slpv2Token,
+    slpv2_sections: &[TemplateSlpv2TokenSection],
+) -> askama::Result<String> {
+    Ok(slpv2_sections[token.section_idx as usize]
+        .data
+        .token_info
+        .token_ticker
+        .clone())
+}
+
 pub fn get_token<'a>(
-    tokens: &'a HashMap<String, Token>,
+    tokens: &'a HashMap<String, proto::Slpv2TokenInfo>,
     token_id: &str,
-) -> askama::Result<Option<&'a Token>> {
+) -> askama::Result<Option<&'a proto::Slpv2TokenInfo>> {
     Ok(tokens.get(token_id))
+}
+
+pub fn get_genesis_data(
+    token_info: &proto::Slpv2TokenInfo,
+) -> askama::Result<&proto::Slpv2GenesisData> {
+    Ok(token_info
+        .genesis_data
+        .as_ref()
+        .expect("Missing genesis_data"))
 }

@@ -1,7 +1,6 @@
 const renderHash = hash => '<a href="/tx/' + hash + '">' + hash + '</a>';
 const renderSize = size => formatByteSize(size);
 const renderFee = (_value, _type, row) => {
-  console.log(row)
   if (row.isCoinbase) {
     return '<div class="ui green horizontal label">Coinbase</div>';
   }
@@ -23,13 +22,18 @@ const renderFeePerByte = (_value, _type, row) => {
   return renderInteger(Math.round(feePerByte * 1000)) + '/kB';
 };
 const renderOutput = (satsOutput, _type, row) => {
-  if (row.token) {
-    var ticker = ' <a href="/tx/' + row.token.tokenId + '">' + row.token.tokenTicker + '</a>';
-    return renderAmount(row.stats.tokenOutput, row.token.decimals) + ticker;
+  if (row.slpv2Sections.length == 0) {
+    return renderSats(row.stats.satsOutput) + ' XEC';
   }
-  return renderSats(row.stats.satsOutput) + ' XEC';
+  let sectionsHtml = '';
+  for (const section of row.slpv2Sections) {
+    sectionsHtml += '<span class="token-bubble" style="background-color: ' + section.tokenInfo.tokenColor + '">';
+    sectionsHtml += renderAmount(section.stats.tokenOutput, section.tokenInfo.decimals);
+    sectionsHtml += ' <a href="/tx/' + section.tokenInfo.tokenId + '">' + section.tokenInfo.tokenTicker + '</a> ';
+    sectionsHtml += '</span>';
+  }
+  return sectionsHtml;
 };
-
 
 const updateLoading = (status) => {
   if (status) {

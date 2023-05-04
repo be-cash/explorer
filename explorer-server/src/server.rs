@@ -1,6 +1,6 @@
 use askama::Template;
 use axum::{response::Redirect, routing::get, Router};
-use bitcoinsuite_chronik_client::proto::{SlpTokenType, SlpTxType, Token, Utxo};
+use bitcoinsuite_chronik_client::proto::{self};
 use bitcoinsuite_chronik_client::{proto::OutPoint, ChronikClient};
 use bitcoinsuite_core::{CashAddress, Hashed, Sha256d};
 use bitcoinsuite_error::Result;
@@ -13,6 +13,9 @@ use std::{
     collections::{hash_map::Entry, HashMap, HashSet},
 };
 
+use crate::api::calc_section_stats;
+use crate::server_primitives::{JsonSlpv2Section, JsonSlpv2TokenInfo};
+use crate::templating::TemplateSlpv2TokenSection;
 use crate::{
     api::{block_txs_to_json, calc_tx_stats, tokens_to_json, tx_history_to_json},
     blockchain::{
@@ -112,18 +115,31 @@ impl Server {
         let block_hash = Sha256d::from_hex_be(block_hex)?;
         let block = self.chronik.block_by_hash(&block_hash).await?;
 
-        let token_ids = block
-            .txs
-            .iter()
-            .filter_map(|tx| {
-                let slp_tx_data = tx.slp_tx_data.as_ref()?;
-                let slp_meta = slp_tx_data.slp_meta.as_ref()?;
-                Some(Sha256d::from_slice_be(&slp_meta.token_id).expect("Impossible"))
-            })
-            .collect::<HashSet<_>>();
+        let mut block_txs = Vec::new();
+        let mut token_ids = HashSet::new();
+        let mut page = 0;
+        loop {
+            let page_txs = self
+                .chronik
+                .block_txs_by_hash(&block_hash, page, 200)
+                .await?;
+            for tx in &page_txs.txs {
+                for section in &tx.slpv2_sections {
+                    token_ids.insert(Sha256d::from_slice(&section.token_id)?);
+                }
+                for burn_token_id in &tx.slpv2_burn_token_ids {
+                    token_ids.insert(Sha256d::from_slice(burn_token_id)?);
+                }
+            }
+            block_txs.extend(page_txs.txs);
+            page += 1;
+            if page == page_txs.num_pages as usize {
+                break;
+            }
+        }
 
         let tokens_by_hex = self.batch_get_chronik_tokens(token_ids).await?;
-        let json_txs = block_txs_to_json(block, &tokens_by_hex)?;
+        let json_txs = block_txs_to_json(block, &block_txs, &tokens_by_hex)?;
 
         Ok(JsonTxsResponse { data: json_txs })
     }
@@ -149,15 +165,12 @@ impl Server {
             .parse()?;
         let address_tx_history = script_endpoint.history_with_page_size(page, take).await?;
 
-        let token_ids = address_tx_history
-            .txs
-            .iter()
-            .filter_map(|tx| {
-                let slp_tx_data = tx.slp_tx_data.as_ref()?;
-                let slp_meta = slp_tx_data.slp_meta.as_ref()?;
-                Some(Sha256d::from_slice_be_or_null(&slp_meta.token_id))
-            })
-            .collect();
+        let mut token_ids = HashSet::new();
+        for tx in &address_tx_history.txs {
+            for section in &tx.slpv2_sections {
+                token_ids.insert(Sha256d::from_slice(&section.token_id)?);
+            }
+        }
 
         let tokens = self.batch_get_chronik_tokens(token_ids).await?;
         let json_tokens = tokens_to_json(&tokens)?;
@@ -173,27 +186,26 @@ impl Server {
 
         let block = self.chronik.block_by_hash(&block_hash).await?;
         let block_info = block.block_info.ok_or_else(|| eyre!("Block has no info"))?;
-        let block_details = block
-            .block_details
-            .ok_or_else(|| eyre!("Block has details"))?;
+        /*let block_details = block
+        .block_details
+        .ok_or_else(|| eyre!("Block has details"))?;*/
 
         let blockchain_info = self.chronik.blockchain_info().await?;
         let best_height = blockchain_info.tip_height;
 
         let difficulty = calculate_block_difficulty(block_info.n_bits);
         let timestamp = Utc.timestamp(block_info.timestamp, 0);
-        let coinbase_data = block.txs[0].inputs[0].input_script.clone();
+        //let coinbase_data = block.txs[0].inputs[0].input_script.clone();
         let confirmations = best_height - block_info.height + 1;
 
         let block_template = BlockTemplate {
             block_hex,
-            block_header: block.raw_header,
+            block_header: vec![], // TODO
             block_info,
-            block_details,
             confirmations,
             timestamp,
             difficulty,
-            coinbase_data,
+            coinbase_data: vec![], // TODO
         };
 
         Ok(block_template.render().unwrap())
@@ -202,72 +214,60 @@ impl Server {
     pub async fn tx(&self, tx_hex: &str) -> Result<String> {
         let tx_hash = Sha256d::from_hex_be(tx_hex)?;
         let tx = self.chronik.tx(&tx_hash).await?;
-        let token_id = match &tx.slp_tx_data {
-            Some(slp_tx_data) => {
-                let slp_meta = slp_tx_data.slp_meta.as_ref().expect("Impossible");
-                Some(Sha256d::from_slice_be(&slp_meta.token_id)?)
-            }
-            None => None,
-        };
-        let token = match &token_id {
-            Some(token_id) => Some(self.chronik.token(token_id).await?),
-            None => None,
-        };
-        let token_ticker = token.as_ref().and_then(|token| {
-            Some(String::from_utf8_lossy(
-                &token
-                    .slp_tx_data
-                    .as_ref()?
-                    .genesis_info
-                    .as_ref()?
-                    .token_ticker,
-            ))
-        });
-        let (title, is_token): (Cow<str>, bool) = match &token_ticker {
-            Some(token_ticker) => (format!("{} Transaction", token_ticker).into(), true),
-            None => {
-                if tx.slp_error_msg.is_empty() {
-                    ("eCash Transaction".into(), false)
-                } else {
-                    ("Invalid eToken Transaction".into(), true)
+
+        let mut slpv2_sections = Vec::new();
+        for section in &tx.slpv2_sections {
+            let token_id = Sha256d::from_slice(&section.token_id)?;
+            let token_info = self.chronik.token(&token_id).await?;
+            let genesis_data = token_info.genesis_data.expect("Missing genesis_data");
+            let token_ticker = String::from_utf8_lossy(&genesis_data.token_ticker);
+            let token_name = String::from_utf8_lossy(&genesis_data.token_name);
+            let token_url = String::from_utf8_lossy(&genesis_data.url);
+            let section_type = match (section.token_type(), section.section_type()) {
+                (proto::Slpv2TokenType::Standard, proto::Slpv2SectionType::Slpv2Genesis) => {
+                    "GENESIS"
                 }
+                (proto::Slpv2TokenType::Standard, proto::Slpv2SectionType::Slpv2Send) => "SEND",
+                (proto::Slpv2TokenType::Standard, proto::Slpv2SectionType::Slpv2Mint) => "MINT",
+                _ => "Unknown",
+            };
+            slpv2_sections.push(TemplateSlpv2TokenSection {
+                section_type: section_type.to_string(),
+                data: JsonSlpv2Section {
+                    token_info: JsonSlpv2TokenInfo {
+                        token_id: token_id.to_string(),
+                        token_type: section.token_type as u32,
+                        token_ticker: token_ticker.to_string(),
+                        token_name: token_name.to_string(),
+                        token_url: token_url.to_string(),
+                        decimals: genesis_data.decimals,
+                        token_color: crate::templating::filters::to_token_color(token_id.as_slice()).unwrap(),
+                    },
+                    stats: calc_section_stats(&tx, section, None),
+                },
+            });
+        }
+
+        let (title, is_token): (Cow<str>, bool) = if slpv2_sections.is_empty() {
+            if tx.slpv2_errors.is_empty() {
+                ("eCash Transaction".into(), false)
+            } else {
+                ("Invalid eToken Transaction".into(), true)
             }
-        };
-
-        let token_hex = token_id.as_ref().map(|token| token.to_hex_be());
-
-        let token_section_title: Cow<str> = match &tx.slp_tx_data {
-            Some(slp_tx_data) => {
-                let slp_meta = slp_tx_data.slp_meta.as_ref().expect("Impossible");
-                let token_type = SlpTokenType::from_i32(slp_meta.token_type)
-                    .ok_or_else(|| eyre!("Malformed slp_meta"))?;
-                let tx_type = SlpTxType::from_i32(slp_meta.tx_type)
-                    .ok_or_else(|| eyre!("Malformed slp_meta"))?;
-
-                let action_str = match (token_type, tx_type) {
-                    (SlpTokenType::Fungible, SlpTxType::Genesis) => "GENESIS",
-                    (SlpTokenType::Fungible, SlpTxType::Mint) => "MINT",
-                    (SlpTokenType::Fungible, SlpTxType::Send) => "SEND",
-                    (SlpTokenType::Fungible, SlpTxType::Burn) => "BURN",
-                    (SlpTokenType::Nft1Group, SlpTxType::Genesis) => "NFT1 GROUP GENESIS",
-                    (SlpTokenType::Nft1Group, SlpTxType::Mint) => "NFT1 GROUP MINT",
-                    (SlpTokenType::Nft1Group, SlpTxType::Send) => "NFT1 GROUP SEND",
-                    (SlpTokenType::Nft1Group, SlpTxType::Burn) => "NFT1 GROUP BURN",
-                    (SlpTokenType::Nft1Child, SlpTxType::Genesis) => "NFT1 Child GENESIS",
-                    (SlpTokenType::Nft1Child, SlpTxType::Send) => "NFT1 Child SEND",
-                    (SlpTokenType::Nft1Child, SlpTxType::Burn) => "NFT1 Child BURN",
-                    _ => "Unknown",
-                };
-
-                format!("Token Details ({} Transaction)", action_str).into()
-            }
-            None => {
-                if tx.slp_error_msg.is_empty() {
-                    "Token Details (Invalid Transaction)".into()
-                } else {
-                    "".into()
+        } else {
+            let mut title = String::new();
+            for (idx, section) in slpv2_sections.iter().enumerate() {
+                if idx > 0 {
+                    if idx == slpv2_sections.len() - 1 {
+                        title.push_str(" & ");
+                    } else {
+                        title.push_str(", ");
+                    }
                 }
+                title.push_str(&section.data.token_info.token_ticker);
             }
+            title.push_str(" Transaction");
+            (title.into(), true)
         };
 
         let blockchain_info = self.chronik.blockchain_info().await?;
@@ -287,20 +287,12 @@ impl Server {
 
         let transaction_template = TransactionTemplate {
             title: &title,
-            token_section_title: &token_section_title,
             is_token,
             tx_hex,
-            token_hex,
-            slp_meta: tx
-                .slp_tx_data
-                .as_ref()
-                .and_then(|slp_tx_data| slp_tx_data.slp_meta.clone()),
+            slpv2_sections,
             tx,
-            slp_genesis_info: token.and_then(|token| token.slp_tx_data?.genesis_info),
             sats_input: tx_stats.sats_input,
             sats_output: tx_stats.sats_output,
-            token_input: tx_stats.token_input,
-            token_output: tx_stats.token_output,
             raw_tx,
             confirmations,
             timestamp,
@@ -332,7 +324,7 @@ impl Server {
         let mut total_xec: i64 = 0;
 
         let mut token_ids: HashSet<Sha256d> = HashSet::new();
-        let mut token_utxos: Vec<Utxo> = Vec::new();
+        let mut token_utxos: Vec<proto::ScriptUtxo> = Vec::new();
         let mut json_balances: HashMap<String, JsonBalance> = HashMap::new();
         let mut main_json_balance: JsonBalance = JsonBalance {
             token_id: None,
@@ -341,52 +333,51 @@ impl Server {
             utxos: Vec::new(),
         };
 
-        for utxo_script in utxos.into_iter() {
-            for utxo in utxo_script.utxos.into_iter() {
-                let OutPoint { txid, out_idx } = &utxo.outpoint.as_ref().unwrap();
-                let mut json_utxo = JsonUtxo {
-                    tx_hash: to_be_hex(txid),
-                    out_idx: *out_idx,
-                    sats_amount: utxo.value,
-                    token_amount: 0,
-                    is_coinbase: utxo.is_coinbase,
-                    block_height: utxo.block_height,
-                };
+        for utxo in utxos.utxos.into_iter() {
+            let OutPoint { txid, out_idx } = &utxo.outpoint.as_ref().unwrap();
+            let mut json_utxo = JsonUtxo {
+                tx_hash: to_be_hex(txid),
+                out_idx: *out_idx,
+                sats_amount: utxo.value,
+                token_amount: 0,
+                is_coinbase: utxo.is_coinbase,
+                block_height: utxo.block_height,
+                is_mint_baton: false,
+            };
 
-                match (&utxo.slp_meta, &utxo.slp_token) {
-                    (Some(slp_meta), Some(slp_token)) => {
-                        let token_id_hex = hex::encode(&slp_meta.token_id);
-                        let token_id_hash = Sha256d::from_slice_be_or_null(&slp_meta.token_id);
+            match &utxo.slpv2 {
+                Some(token) => {
+                    let token_id = Sha256d::from_slice(&token.token_id)?;
 
-                        json_utxo.token_amount = slp_token.amount;
+                    json_utxo.token_amount = token.amount as u64;
+                    json_utxo.is_mint_baton = token.is_mint_baton;
 
-                        match json_balances.entry(token_id_hex) {
-                            Entry::Occupied(mut entry) => {
-                                let entry = entry.get_mut();
-                                entry.sats_amount += utxo.value;
-                                entry.token_amount += i128::from(slp_token.amount);
-                                entry.utxos.push(json_utxo);
-                            }
-                            Entry::Vacant(entry) => {
-                                entry.insert(JsonBalance {
-                                    token_id: Some(hex::encode(&slp_meta.token_id)),
-                                    sats_amount: utxo.value,
-                                    token_amount: slp_token.amount.into(),
-                                    utxos: vec![json_utxo],
-                                });
-                            }
+                    match json_balances.entry(token_id.to_string()) {
+                        Entry::Occupied(mut entry) => {
+                            let entry = entry.get_mut();
+                            entry.sats_amount += utxo.value;
+                            entry.token_amount += token.amount;
+                            entry.utxos.push(json_utxo);
                         }
+                        Entry::Vacant(entry) => {
+                            entry.insert(JsonBalance {
+                                token_id: Some(token_id.to_string()),
+                                sats_amount: utxo.value,
+                                token_amount: token.amount.into(),
+                                utxos: vec![json_utxo],
+                            });
+                        }
+                    }
 
-                        token_ids.insert(token_id_hash);
-                        token_dust += utxo.value;
-                        token_utxos.push(utxo);
-                    }
-                    _ => {
-                        total_xec += utxo.value;
-                        main_json_balance.utxos.push(json_utxo);
-                    }
-                };
-            }
+                    token_ids.insert(token_id);
+                    token_dust += utxo.value;
+                    token_utxos.push(utxo);
+                }
+                _ => {
+                    total_xec += utxo.value;
+                    main_json_balance.utxos.push(json_utxo);
+                }
+            };
         }
         json_balances.insert(String::from("main"), main_json_balance);
 
@@ -417,7 +408,7 @@ impl Server {
     pub async fn batch_get_chronik_tokens(
         &self,
         token_ids: HashSet<Sha256d>,
-    ) -> Result<HashMap<String, Token>> {
+    ) -> Result<HashMap<String, proto::Slpv2TokenInfo>> {
         let mut token_calls = Vec::new();
         let mut token_map = HashMap::new();
 
@@ -427,11 +418,7 @@ impl Server {
 
         let tokens = future::try_join_all(token_calls).await?;
         for token in tokens.into_iter() {
-            if let Some(slp_tx_data) = &token.slp_tx_data {
-                if let Some(slp_meta) = &slp_tx_data.slp_meta {
-                    token_map.insert(hex::encode(&slp_meta.token_id), token);
-                }
-            }
+            token_map.insert(Sha256d::from_slice(&token.token_id)?.to_string(), token);
         }
 
         Ok(token_map)

@@ -1,5 +1,5 @@
-{% macro render(index, input, tx, slp_genesis_info) %}
-  {% let is_token = input.slp_token|check_is_token %}
+{% macro render(index, input, tx, slpv2_sections) %}
+  {% let is_token = input.slpv2|check_is_token %}
   {% let destination = input.output_script|destination_from_script(is_token) %}
   {% let decoded_input_script = input.input_script|get_script %}
 
@@ -20,7 +20,7 @@
             {{ index }}
           </td>
           <td class="one wide">
-            {% match input.slp_token %}
+            {% match input.slpv2 %}
               {% when Some with (_) %}
                 <img src="/assets/slp-logo.png" />
               {% when None %}
@@ -48,29 +48,25 @@
 
     <td colspan="2">
       <div class="amount hex">
-        {% match input.slp_token %}
-          {% when Some with (slp_token) %}
-            {% match tx.slp_tx_data %}
-              {% when Some with (slp_tx_data) %}
-                {% match slp_genesis_info %}
-                  {% when Some with (genesis_info) %}
-                    {% if slp_token.amount > 0 || slp_token.is_mint_baton %}
-                      {% if slp_token.is_mint_baton %}
-                        <div class="ui green horizontal label">Mint baton</div>
-                      {% else %}
-                        {{ slp_token.amount|to_i128|render_token_amount(genesis_info.decimals)|safe }} {{ genesis_info.token_ticker|string_from_lossy_utf8 }}
-                      {% endif %}
-                    {% endif %}
+        {% match input.slpv2 %}
+          {% when Some with (token) %}
+            {% if token.amount > 0 || token.is_mint_baton %}
+              <span class="token-bubble" style="background-color: {{token.token_id|to_token_color}};">
+                {% if !token.is_mint_baton %}
+                  {{ token|render_section_token_amount(slpv2_sections)|safe }}
+                {% endif %}
+                <a href="/tx/{{ token.token_id|to_le_hex }}">
+                  {{ token|token_ticker(slpv2_sections) }}
+                </a>
+                {% if token.is_mint_baton %}
+                  Mint Baton
+                {% endif %}
+              </span>
+            {% endif %}
 
-                    <div>
-                      <small>{{ input.value|render_sats|safe }} XEC</small>
-                    </div>
-                  {% when None %}
-                    {{ input.value|render_sats|safe }} XEC
-                  {% when None %}
-                {% endmatch %}
-              {% when None %}
-            {% endmatch %}
+            <div>
+              <small>{{ input.value|render_sats|safe }} XEC</small>
+            </div>
           {% when None %}
             {{ input.value|render_sats|safe }} XEC
         {% endmatch %}

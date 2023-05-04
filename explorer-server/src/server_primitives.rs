@@ -10,6 +10,7 @@ pub struct JsonUtxo {
     pub token_amount: u64,
     pub is_coinbase: bool,
     pub block_height: i32,
+    pub is_mint_baton: bool,
 }
 
 #[derive(Serialize)]
@@ -17,19 +18,20 @@ pub struct JsonUtxo {
 pub struct JsonBalance {
     pub token_id: Option<String>,
     pub sats_amount: i64,
-    pub token_amount: i128,
+    pub token_amount: i64,
     pub utxos: Vec<JsonUtxo>,
 }
 
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
-pub struct JsonToken {
+pub struct JsonSlpv2TokenInfo {
     pub token_id: String,
     pub token_type: u32,
     pub token_ticker: String,
     pub token_name: String,
+    pub token_url: String,
     pub decimals: u32,
-    pub group_id: Option<String>,
+    pub token_color: String,
 }
 
 #[derive(Serialize)]
@@ -54,8 +56,7 @@ pub struct JsonTx {
     pub num_inputs: u32,
     pub num_outputs: u32,
     pub stats: JsonTxStats,
-    pub token_id: Option<String>,
-    pub token: Option<JsonToken>,
+    pub slpv2_sections: Vec<JsonSlpv2Section>,
 }
 
 #[derive(Serialize, Clone)]
@@ -64,17 +65,29 @@ pub struct JsonTxStats {
     pub sats_input: i64,
     pub sats_output: i64,
     pub delta_sats: i64,
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct JsonSlpv2Section {
+    pub token_info: JsonSlpv2TokenInfo,
+    pub stats: JsonSlpv2SectionStats,
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct JsonSlpv2SectionStats {
     pub delta_tokens: i64,
-    pub token_input: i128,
-    pub token_output: i128,
-    pub does_burn_slp: bool,
+    pub token_input: i64,
+    pub token_output: i64,
+    pub does_burn_tokens: bool,
 }
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct JsonTxs {
     pub txs: Vec<JsonTx>,
-    pub tokens: Vec<JsonToken>,
+    pub tokens: Vec<JsonSlpv2TokenInfo>,
     pub token_indices: HashMap<Vec<u8>, usize>,
 }
 

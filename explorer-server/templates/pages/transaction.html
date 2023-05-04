@@ -34,16 +34,12 @@
               <td><strong>Transaction ID</strong></td>
               <td><span class="hex">{{ tx_hex }}</span></td>
             </tr>
-            <tr>
-              <td><strong>Token ID</strong></td>
-              <td>
-                {% match token_hex %}
-                  {% when Some with (token_hex) %}
-                    <span class="hex">{{ token_hex }}</span>
-                  {% when None %}
-                {% endmatch %}
-              </td>
-            </tr>
+            {% for section in slpv2_sections %}
+              <tr>
+                <td><strong>Token ID ({{ section.section_type }} {{ section.data.token_info.token_ticker }})</strong></td>
+                <td><span class="hex">{{ section.data.token_info.token_id }}</span></td>
+              </tr>
+            {% endfor %}
           {% else %}
             <tr>
               <td class="no-padding"><strong>Transaction ID</strong></td>
@@ -144,12 +140,12 @@
       </table>
     </div>
 
-    {% if is_token %}
-      <h2>{{ token_section_title }}</h2>
+    {% for section in slpv2_sections %}
+      <h2>Token Details ({{ section.section_type }} {{ section.data.token_info.token_ticker }})</h2>
       <div class="ui grid segment tx-details">
-        {% call token_info_table::render(tx, slp_genesis_info, slp_meta, token_input, token_output) %}
+        {% call token_info_table::render(tx, section) %}
       </div>
-    {% endif %}
+    {% endfor %}
 
     <div class="ui grid">
       <div class="ten wide column">
@@ -172,7 +168,7 @@
         <table id="inputs" class="ui very basic table">
           <tbody>
             {% for input in tx.inputs %}
-              {% call input::render(loop.index0, input, tx, slp_genesis_info) %}
+              {% call input::render(loop.index0, input, tx, slpv2_sections) %}
             {% endfor %}
           </tbody>
         </table>
@@ -190,7 +186,7 @@
         <table id="outputs" class="ui very basic table">
           <tbody>
             {% for output in tx.outputs %}
-              {% call output::render(loop.index0, output, tx, slp_genesis_info) %}
+              {% call output::render(loop.index0, output, tx, slpv2_sections) %}
             {% endfor %}
           </tbody>
         </table>

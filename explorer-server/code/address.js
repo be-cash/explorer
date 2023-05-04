@@ -21,7 +21,7 @@ function loadSatsTable() {
         },
         {
           id: "blockHeight",
-          header: "Block Height",
+          header: "Height",
           adjust: true,
           template: function (row) {
             return '<a href="/block-height/' + row.blockHeight + '">' + renderInteger(row.blockHeight) + '</a>';
@@ -76,7 +76,12 @@ function loadTokenTable(tokenId) {
           header: addrBalances[tokenId].token?.tokenTicker + " amount",
           adjust: true,
           template: function (row) {
-            return renderAmount(row.tokenAmount, addrBalances[tokenId].token?.decimals) + ' ' + addrBalances[tokenId].token?.tokenTicker;
+            const tokenTicker = addrBalances[tokenId].token?.tokenTicker;
+            if (row.isMintBaton) {
+              return 'Mint Baton ' + tokenTicker;
+            } else {
+              return renderAmount(row.tokenAmount, addrBalances[tokenId].token?.decimals) + ' ' + tokenTicker;
+            }
           },
         },
         {
@@ -149,11 +154,17 @@ const renderFeePerByte = (_value, _type, row) => {
 const renderAmountXEC = (_value, _type, row) => renderSats(row.stats.deltaSats) + ' XEC';
 
 const renderToken = (_value, _type, row) => {
-  if (row.token !== null) {
-    var ticker = ' <a href="/tx/' + row.token.tokenId + '">' + row.token.tokenTicker + '</a>';
-    return renderAmount(row.stats.deltaTokens, row.token.decimals) + ticker;
+  if (row.slpv2Sections.length == 0) {
+    return '';
   }
-  return '';
+  let sectionsHtml = '';
+  for (const section of row.slpv2Sections) {
+    sectionsHtml += '<span class="token-bubble" style="background-color: ' + section.tokenInfo.tokenColor + '">';
+    sectionsHtml += renderAmount(section.stats.deltaTokens, section.tokenInfo.decimals);
+    sectionsHtml += ' <a href="/tx/' + section.tokenInfo.tokenId + '">' + section.tokenInfo.tokenTicker + '</a> ';
+    sectionsHtml += '</span>';
+  }
+  return sectionsHtml;
 };
 
 const updateTableLoading = (isLoading, tableId) => {
@@ -197,7 +208,7 @@ const datatable = () => {
       { name: "age", data: 'timestamp', title: "Age", render: renderAge },
       { name: "timestamp", data: 'timestamp', title: "Date (UTC" + tzOffset + ")", render: renderTimestamp },
       { name: "txHash", data: 'txHash', title: "Transaction ID", className: "hash", render: renderTxID },
-      { name: "blockHeight", title: "Block Height", render: renderBlockHeight },
+      { name: "blockHeight", title: "Height", render: renderBlockHeight },
       { name: "size", data: 'size', title: "Size", render: renderSize },
       { name: "fee", title: "Fee [sats]", className: "fee", render: renderFee },
       { name: "numInputs", data: 'numInputs', title: "Inputs" },

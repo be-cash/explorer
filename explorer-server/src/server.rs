@@ -1,6 +1,6 @@
 use askama::Template;
 use axum::{response::Redirect, routing::get, Router};
-use bitcoinsuite_chronik_client::proto::{SlpTokenType, SlpTxType, Token, Utxo};
+use bitcoinsuite_chronik_client::proto::{SlpTokenType, SlpTxType, Token, Utxo, self};
 use bitcoinsuite_chronik_client::{proto::OutPoint, ChronikClient};
 use bitcoinsuite_core::{CashAddress, Hashed, Sha256d};
 use bitcoinsuite_error::Result;
@@ -202,16 +202,17 @@ impl Server {
     pub async fn tx(&self, tx_hex: &str) -> Result<String> {
         let tx_hash = Sha256d::from_hex_be(tx_hex)?;
         let tx = self.chronik.tx(&tx_hash).await?;
-        let token_id = match &tx.slp_tx_data {
+        let (token_id, token) = match &tx.slp_tx_data {
             Some(slp_tx_data) => {
                 let slp_meta = slp_tx_data.slp_meta.as_ref().expect("Impossible");
-                Some(Sha256d::from_slice_be(&slp_meta.token_id)?)
+                let token_id = Sha256d::from_slice_be(&slp_meta.token_id)?;
+                let mut token = None;
+                if slp_meta.token_type() != proto::SlpTokenType::UnknownTokenType {
+                    token = Some(self.chronik.token(&token_id).await?);
+                }
+                (Some(token_id), token)
             }
-            None => None,
-        };
-        let token = match &token_id {
-            Some(token_id) => Some(self.chronik.token(token_id).await?),
-            None => None,
+            None => (None, None),
         };
         let token_ticker = token.as_ref().and_then(|token| {
             Some(String::from_utf8_lossy(

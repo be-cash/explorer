@@ -1,6 +1,6 @@
 use askama::Template;
 use axum::{response::Redirect, routing::get, Router};
-use bitcoinsuite_chronik_client::proto::{SlpTokenType, SlpTxType, Token, Utxo, self};
+use bitcoinsuite_chronik_client::proto::{SlpTokenType, SlpTxType, Token, Utxo};
 use bitcoinsuite_chronik_client::{proto::OutPoint, ChronikClient};
 use bitcoinsuite_core::{CashAddress, Hashed, Sha256d};
 use bitcoinsuite_error::Result;
@@ -118,6 +118,9 @@ impl Server {
             .filter_map(|tx| {
                 let slp_tx_data = tx.slp_tx_data.as_ref()?;
                 let slp_meta = slp_tx_data.slp_meta.as_ref()?;
+                if slp_meta.token_type() == SlpTokenType::UnknownTokenType {
+                    return None;
+                }
                 Some(Sha256d::from_slice_be(&slp_meta.token_id).expect("Impossible"))
             })
             .collect::<HashSet<_>>();
@@ -155,6 +158,9 @@ impl Server {
             .filter_map(|tx| {
                 let slp_tx_data = tx.slp_tx_data.as_ref()?;
                 let slp_meta = slp_tx_data.slp_meta.as_ref()?;
+                if slp_meta.token_type() == SlpTokenType::UnknownTokenType {
+                    return None;
+                }
                 Some(Sha256d::from_slice_be_or_null(&slp_meta.token_id))
             })
             .collect();
@@ -207,7 +213,7 @@ impl Server {
                 let slp_meta = slp_tx_data.slp_meta.as_ref().expect("Impossible");
                 let token_id = Sha256d::from_slice_be(&slp_meta.token_id)?;
                 let mut token = None;
-                if slp_meta.token_type() != proto::SlpTokenType::UnknownTokenType {
+                if slp_meta.token_type() != SlpTokenType::UnknownTokenType {
                     token = Some(self.chronik.token(&token_id).await?);
                 }
                 (Some(token_id), token)
